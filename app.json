@@ -2,7 +2,7 @@
   "expo": {
     "name": "Field-Tec",
     "slug": "Field-Tec",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "fieldtec",
@@ -19,9 +19,11 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#ffffff",
+        "package": "com.mthz68.fieldtec"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.mthz68.FieldTec"
     },
     "web": {
       "bundler": "metro",
@@ -33,6 +35,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "745cce2e-29d1-415f-bca6-608b83bd5f99"
+      }
     }
   }
 }
