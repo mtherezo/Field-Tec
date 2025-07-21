@@ -1,8 +1,9 @@
 // app/(tabs)/index.tsx
 
-import React, { useState, useCallback } from 'react';
+// ✅ 1. IMPORTAR useEffect
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, Pressable, Alert, Modal, useColorScheme, Button } from 'react-native';
-import { Stack, useRouter } from 'expo-router'; // useFocusEffect não é mais necessário aqui
+import { Stack, useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -10,10 +11,8 @@ import * as Print from 'expo-print';
 import * as XLSX from 'xlsx';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 
-// ✅ 1. IMPORTAR A NOSSA STORE
 import { useAtendimentoStore } from '@/src/store/atendimentoStore';
 import { Atendimento, Status, statusOptions } from '@/src/types/atendimento';
-// A importação do storageService não é mais necessária aqui
 
 const AtendimentoItem = ({ item }: { item: Atendimento }) => {
   const router = useRouter();
@@ -39,15 +38,19 @@ export default function ListaAtendimentosScreen() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   
-  // ✅ 2. BUSCAR OS DADOS DIRETAMENTE DA STORE
-  // O useFocusEffect e o useState local para 'atendimentos' foram removidos.
-  const { atendimentos, isLoading } = useAtendimentoStore();
+  // ✅ 2. PEGAR OS DADOS E A FUNÇÃO DE INICIALIZAÇÃO DA STORE
+  const { atendimentos, isLoading, initializeAtendimentos } = useAtendimentoStore();
   
   const [modalVisible, setModalVisible] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState<'Todos' | Status>('Todos');
   const [filtroDataPredefinido, setFiltroDataPredefinido] = useState<FiltroDataPredefinido>('Todos');
   const [dataInicioFiltro, setDataInicioFiltro] = useState<Date | null>(null);
   const [dataFimFiltro, setDataFimFiltro] = useState<Date | null>(null);
+
+  // ✅ 3. ESTE useEffect RODA UMA VEZ E CARREGA OS DADOS
+  useEffect(() => {
+    initializeAtendimentos();
+  }, []);
 
   const atendimentosFiltrados = atendimentos.filter(atendimento => {
     const statusMatch = filtroStatus === 'Todos' || atendimento.status === filtroStatus;
@@ -80,11 +83,8 @@ export default function ListaAtendimentosScreen() {
         mode: 'date',
         onChange: (event, selectedDate) => {
             if (event.type === 'set' && selectedDate) {
-                if (tipo === 'inicio') {
-                    setDataInicioFiltro(selectedDate);
-                } else {
-                    setDataFimFiltro(selectedDate);
-                }
+                if (tipo === 'inicio') { setDataInicioFiltro(selectedDate); } 
+                else { setDataFimFiltro(selectedDate); }
                 setFiltroDataPredefinido('Todos');
             }
         }
