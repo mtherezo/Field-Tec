@@ -126,10 +126,16 @@ export default function FormAtendimentoScreen() {
         <RNTextInput ref={causaRealRef} style={styles.input} value={causaReal} onChangeText={setCausaReal} returnKeyType={isPendente ? "next" : "done"} onSubmitEditing={() => { if (isPendente) { detalhePendenciaRef.current?.focus(); } else { Keyboard.dismiss(); } }} blurOnSubmit={false} />
         <Text style={styles.label}>Status</Text>
         <View style={styles.pickerContainer}>
-          <Picker selectedValue={status} onValueChange={(itemValue) => setStatus(itemValue as Status)}>
-            {statusOptions.map((opt) => (<Picker.Item key={opt} label={opt} value={opt} />))}
-          </Picker>
-        </View>
+  <Picker
+    selectedValue={status}
+    onValueChange={(itemValue) => setStatus(itemValue as Status)}
+    style={{ color: 'black' }} // <-- ADICIONADO ESTA LINHA
+  >
+    {statusOptions.map((opt) => (
+      <Picker.Item key={opt} label={opt} value={opt} />
+    ))}
+  </Picker>
+</View>
         {isPendente && (
           <>
             <Text style={styles.label}>Qual a Pendência?</Text>
@@ -164,7 +170,14 @@ const styles = StyleSheet.create({
   scrollContentContainer: { padding: 20, paddingBottom: 40 },
   label: { fontSize: 15, fontWeight: 'bold', marginBottom: 5, color: 'white' },
   input: { backgroundColor: '#c7d8c4ff', color: 'black', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', fontSize: 15, marginBottom: 10 },
-  pickerContainer: { backgroundColor: '#c7d8c4ff', borderRadius: 8, borderWidth: 1, borderColor: '#ddd', marginBottom: 10 },
+  pickerContainer: { 
+    backgroundColor: '#c7d8c4ff', 
+    borderRadius: 8, 
+    borderWidth: 1, 
+    borderColor: '#ddd', 
+    marginBottom: 10,
+        
+  },
   dateDisplay: { fontSize: 15, textAlign: 'center', backgroundColor: '#c7d8c4ff', padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', marginBottom: 10 },
   dateButtonsContainer: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   button: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 12, borderRadius: 8, elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.22, shadowRadius: 2.22 },
@@ -174,4 +187,10 @@ const styles = StyleSheet.create({
   buttonText: { color: 'white', fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
   secondaryButtonText: { color: '#007AFF' },
   clearButtonText: { color: '#DC3545' },
+  pickerText: {
+    color: 'black',
+    fontSize: 15,
+    fontWeight: 'bold',
+    
+  },
 });
