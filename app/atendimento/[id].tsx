@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, Pressable } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
-import { getAtendimentos, saveAtendimentos } from '../../src/services/storageService';
-import { Atendimento } from '../../src/types/atendimento';
+// ✅ 1. IMPORTAR A NOSSA STORE
+import { useAtendimentoStore } from '@/src/store/atendimentoStore';
+import { Atendimento } from '@/src/types/atendimento';
 import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -28,36 +29,36 @@ const InfoRow = ({ label, value, icon }: { label: string; value: string; icon?: 
 export default function DetalhesAtendimentoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [atendimento, setAtendimento] = useState<Atendimento | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  // ✅ 2. PEGAR OS DADOS E AÇÕES DIRETAMENTE DA STORE
+  const { atendimentos, removeAtendimento, isLoading } = useAtendimentoStore();
+  
+  // O estado local 'atendimento' agora é derivado da store
+  const atendimento = atendimentos.find(at => at.id === id);
 
-  // (A lógica de useEffect e handleDelete continua a mesma)
-  useEffect(() => {
-    if (!id) return;
-    const carregarAtendimento = async () => {
-      const todos = await getAtendimentos();
-      const encontrado = todos.find((at) => at.id === id);
-      if (encontrado) { setAtendimento(encontrado); }
-      else { Alert.alert("Erro", "Atendimento não encontrado."); }
-      setIsLoading(false);
-    };
-    carregarAtendimento();
-  }, [id]);
-
+  // ✅ 3. FUNÇÃO DE DELETAR ATUALIZADA
   const handleDelete = () => {
-    Alert.alert( "Confirmar Exclusão", `Você tem certeza que deseja excluir o chamado ${atendimento?.numeroChamado}?`,
-      [ { text: "Cancelar", style: "cancel" },
-        { text: "Sim, Excluir", onPress: async () => {
-            const todos = await getAtendimentos();
-            const novaLista = todos.filter(at => at.id !== id);
-            await saveAtendimentos(novaLista);
+    if (!atendimento) return;
+
+    Alert.alert( "Confirmar Exclusão", `Você tem certeza que deseja excluir o chamado ${atendimento.numeroChamado}?`,
+      [ 
+        { text: "Cancelar", style: "cancel" },
+        { 
+          text: "Sim, Excluir", 
+          onPress: async () => {
+            // Chama a ação da store, que cuida de tudo
+            await removeAtendimento(atendimento.id);
             Alert.alert("Sucesso", "Atendimento excluído.");
+            // Volta para a tela principal
             router.replace('/(tabs)');
-          }, style: "destructive"
+          }, 
+          style: "destructive"
         }
       ]
     );
   };
+
+  // O useEffect não é mais necessário para carregar os dados, a store já faz isso.
 
   if (isLoading) {
     return <View style={styles.centered}><ActivityIndicator size="large" /></View>;
@@ -78,7 +79,6 @@ export default function DetalhesAtendimentoScreen() {
            </View>
         </InfoCard>
         
-        {/* ✅ NOVO CARD CONDICIONAL PARA PENDÊNCIA */}
         {atendimento.status.includes('Pendente') && atendimento.detalhePendencia && (
           <InfoCard title='Detalhe da Pendência'>
             <View style={styles.pendenciaContainer}>
@@ -120,7 +120,7 @@ export default function DetalhesAtendimentoScreen() {
   );
 }
 
-// --- ESTILOS ---
+// --- ESTILOS (mantendo suas customizações) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1, 
@@ -134,6 +134,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#3e2961ff', // Adicionado para consistência
   },
   card: {
     backgroundColor: '#c7d8c4ff',
@@ -228,11 +229,11 @@ const styles = StyleSheet.create({
   pendenciaContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e0d39fff', // Um fundo amarelo claro para destaque
+    backgroundColor: '#e0d39fff',
     padding: 12,
     borderRadius: 8,
     borderLeftWidth: 4,
-    borderLeftColor: '#FBBF24', // Uma borda amarela para ênfase
+    borderLeftColor: '#FBBF24',
     gap: 10,
   },
 });

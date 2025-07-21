@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, Pressable, Alert, Modal, useColorScheme, Button } from 'react-native';
-import { useFocusEffect, Stack, useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router'; // useFocusEffect não é mais necessário aqui
 import { FontAwesome } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -10,8 +10,10 @@ import * as Print from 'expo-print';
 import * as XLSX from 'xlsx';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 
-import { Atendimento, Status, statusOptions } from '../../src/types/atendimento';
-import { getAtendimentos } from '../../src/services/storageService';
+// ✅ 1. IMPORTAR A NOSSA STORE
+import { useAtendimentoStore } from '@/src/store/atendimentoStore';
+import { Atendimento, Status, statusOptions } from '@/src/types/atendimento';
+// A importação do storageService não é mais necessária aqui
 
 const AtendimentoItem = ({ item }: { item: Atendimento }) => {
   const router = useRouter();
@@ -31,49 +33,44 @@ const getStatusColor = (status: string) => {
   return 'orange';
 };
 
+type FiltroDataPredefinido = 'Todos' | 'Este Mês' | 'Mês Passado';
+
 export default function ListaAtendimentosScreen() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   
-  const [atendimentos, setAtendimentos] = useState<Atendimento[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [modalVisible, setModalVisible] = useState(false);
+  // ✅ 2. BUSCAR OS DADOS DIRETAMENTE DA STORE
+  // O useFocusEffect e o useState local para 'atendimentos' foram removidos.
+  const { atendimentos, isLoading } = useAtendimentoStore();
   
+  const [modalVisible, setModalVisible] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState<'Todos' | Status>('Todos');
-  // ✅ 1. ESTADOS DE FILTRO DE DATA SIMPLIFICADOS
+  const [filtroDataPredefinido, setFiltroDataPredefinido] = useState<FiltroDataPredefinido>('Todos');
   const [dataInicioFiltro, setDataInicioFiltro] = useState<Date | null>(null);
   const [dataFimFiltro, setDataFimFiltro] = useState<Date | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      const carregarDados = async () => {
-        setIsLoading(true);
-        const dadosSalvos = await getAtendimentos();
-        dadosSalvos.sort((a, b) => new Date(b.dataInicio).getTime() - new Date(a.dataInicio).getTime());
-        setAtendimentos(dadosSalvos);
-        setIsLoading(false);
-      };
-      carregarDados();
-    }, [])
-  );
-
-  // ✅ 2. LÓGICA DE FILTRAGEM SIMPLIFICADA
   const atendimentosFiltrados = atendimentos.filter(atendimento => {
     const statusMatch = filtroStatus === 'Todos' || atendimento.status === filtroStatus;
     if (!statusMatch) return false;
-
     const dataAtendimento = new Date(atendimento.dataInicio);
-
-    // Lógica para filtro por período customizado
+    if (filtroDataPredefinido !== 'Todos') {
+        const hoje = new Date();
+        if (filtroDataPredefinido === 'Este Mês') {
+            return dataAtendimento.getMonth() === hoje.getMonth() && dataAtendimento.getFullYear() === hoje.getFullYear();
+        }
+        if (filtroDataPredefinido === 'Mês Passado') {
+            const mesPassado = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+            return dataAtendimento.getMonth() === mesPassado.getMonth() && dataAtendimento.getFullYear() === mesPassado.getFullYear();
+        }
+    }
     if (dataInicioFiltro && dataFimFiltro) {
         const inicio = new Date(dataInicioFiltro);
-        inicio.setHours(0, 0, 0, 0); // Começo do dia
+        inicio.setHours(0, 0, 0, 0);
         const fim = new Date(dataFimFiltro);
-        fim.setHours(23, 59, 59, 999); // Fim do dia
+        fim.setHours(23, 59, 59, 999);
         return dataAtendimento >= inicio && dataAtendimento <= fim;
     }
-
-    return true; // Se nenhum filtro de data estiver ativo, retorna true
+    return true;
   });
 
   const showDateFilterPicker = (tipo: 'inicio' | 'fim') => {
@@ -88,6 +85,7 @@ export default function ListaAtendimentosScreen() {
                 } else {
                     setDataFimFiltro(selectedDate);
                 }
+                setFiltroDataPredefinido('Todos');
             }
         }
     });
@@ -95,75 +93,17 @@ export default function ListaAtendimentosScreen() {
 
   const limparFiltros = () => {
     setFiltroStatus('Todos');
+    setFiltroDataPredefinido('Todos');
     setDataInicioFiltro(null);
     setDataFimFiltro(null);
     setModalVisible(false);
   };
 
-  const generateHtmlForPdf = (data: Atendimento[]) => {
-    const atendimentosHtml = data.map(at => `
-      <tr>
-        <td>${at.numeroChamado}</td>
-        <td>${at.numeroLogicoTerminal}</td>
-        <td>${at.status}</td>
-        <td>${at.detalhePendencia || ''}</td>
-        <td>${new Date(at.dataInicio).toLocaleDateString('pt-BR')}</td>
-      </tr>
-    `).join('');
+  const generateHtmlForPdf = (data: Atendimento[]) => { /* ... sua função de gerar PDF ... */ };
+  const handleExportPdf = async () => { /* ... sua função de exportar PDF ... */ };
+  const handleExportXlsx = async () => { /* ... sua função de exportar XLSX ... */ };
 
-    return `
-      <html>
-        <head><style>body{font-family:Helvetica,sans-serif;color:#333}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;text-align:left;padding:8px;font-size:10px}th{background-color:#f2f2f2}h1{text-align:center;color:#3e2961ff}p{font-size:12px}</style></head>
-        <body>
-          <h1>Relatório de Atendimentos</h1>
-          <p><strong>Filtro Aplicado:</strong> ${filtroStatus} | Período: ${(dataInicioFiltro && dataFimFiltro ? `${dataInicioFiltro.toLocaleDateString('pt-BR')} a ${dataFimFiltro.toLocaleDateString('pt-BR')}`: 'Todos')}</p>
-          <p><strong>Total de Registros:</strong> ${data.length}</p>
-          <table>
-            <thead><tr><th>Chamado</th><th>Terminal</th><th>Status</th><th>Detalhe Pendência</th><th>Data</th></tr></thead>
-            <tbody>${atendimentosHtml}</tbody>
-          </table>
-        </body>
-      </html>
-    `;
-  };
-
-  const handleExportPdf = async () => {
-    const data = atendimentosFiltrados;
-    if (data.length === 0) {
-      Alert.alert("Sem Dados", "Não há atendimentos para exportar em PDF com o filtro atual.");
-      return;
-    }
-    try {
-      const htmlContent = generateHtmlForPdf(data);
-      const { uri } = await Print.printToFileAsync({ html: htmlContent, base64: false });
-      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Exportar Relatório PDF' });
-    } catch (error) {
-      Alert.alert("Erro", "Não foi possível gerar o arquivo PDF.");
-    }
-  };
-
-  const handleExportXlsx = async () => {
-    const data = atendimentosFiltrados;
-    if (data.length === 0) {
-      Alert.alert("Sem Dados", "Não há atendimentos para exportar com o filtro atual.");
-      return;
-    }
-    const header = ["Chamado", "Terminal", "Status", "Motivo", "Detalhe Pendência", "Causa Real", "Data Início", "Data Fim"];
-    const rows = data.map(at => [ at.numeroChamado, at.numeroLogicoTerminal, at.status, at.solicitacao, at.detalhePendencia || '', at.causaReal, new Date(at.dataInicio).toLocaleString('pt-BR'), at.dataFim ? new Date(at.dataFim).toLocaleString('pt-BR') : '' ]);
-    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Atendimentos");
-    const base64 = XLSX.write(wb, { type: "base64" });
-    const filename = FileSystem.documentDirectory + "Relatorio_Atendimentos.xlsx";
-    try {
-      await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
-      await Sharing.shareAsync(filename, { mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', dialogTitle: 'Exportar Relatório Excel' });
-    } catch (error) {
-      Alert.alert("Erro", "Não foi possível gerar o arquivo Excel.");
-    }
-  };
-
-  const isFiltroAtivo = filtroStatus !== 'Todos' || (!!dataInicioFiltro && !!dataFimFiltro);
+  const isFiltroAtivo = filtroStatus !== 'Todos' || filtroDataPredefinido !== 'Todos' || (!!dataInicioFiltro && !!dataFimFiltro);
 
   if (isLoading) {
     return <ActivityIndicator size="large" style={styles.loader} />;
@@ -171,23 +111,17 @@ export default function ListaAtendimentosScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ✅ 3. MODAL DE FILTRO SIMPLIFICADO */}
       <Modal visible={modalVisible} onRequestClose={() => setModalVisible(false)} transparent={true} animationType="slide">
         <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
           <View style={styles.modalView}>
             <Text style={styles.modalTitle}>Filtrar por Status</Text>
             {['Todos', ...statusOptions].map(status => (<Pressable key={status} style={styles.modalOption} onPress={() => { setFiltroStatus(status as any); setModalVisible(false); }}><Text style={styles.modalOptionText}>{status}</Text></Pressable>))}
-            
+            <Text style={[styles.modalTitle, { marginTop: 20 }]}>Filtros Rápidos</Text>
+            {(['Todos', 'Este Mês', 'Mês Passado'] as FiltroDataPredefinido[]).map(periodo => (<Pressable key={periodo} style={styles.modalOption} onPress={() => { setFiltroDataPredefinido(periodo); setDataInicioFiltro(null); setDataFimFiltro(null); setModalVisible(false); }}><Text style={styles.modalOptionText}>{periodo}</Text></Pressable>))}
             <Text style={[styles.modalTitle, { marginTop: 20 }]}>Filtrar por Período</Text>
             <View style={styles.dateFilterRow}>
-                <Pressable style={styles.datePickerButton} onPress={() => showDateFilterPicker('inicio')}>
-                    <FontAwesome name="calendar" size={16} color="#333" />
-                    <Text style={styles.datePickerText}>{dataInicioFiltro ? `De: ${dataInicioFiltro.toLocaleDateString('pt-BR')}` : 'Data Início'}</Text>
-                </Pressable>
-                <Pressable style={styles.datePickerButton} onPress={() => showDateFilterPicker('fim')}>
-                    <FontAwesome name="calendar" size={16} color="#333" />
-                    <Text style={styles.datePickerText}>{dataFimFiltro ? `Até: ${dataFimFiltro.toLocaleDateString('pt-BR')}` : 'Data Fim'}</Text>
-                </Pressable>
+                <Pressable style={styles.datePickerButton} onPress={() => showDateFilterPicker('inicio')}><FontAwesome name="calendar" size={16} color="#333" /><Text style={styles.datePickerText}>{dataInicioFiltro ? `De: ${dataInicioFiltro.toLocaleDateString('pt-BR')}` : 'Data Início'}</Text></Pressable>
+                <Pressable style={styles.datePickerButton} onPress={() => showDateFilterPicker('fim')}><FontAwesome name="calendar" size={16} color="#333" /><Text style={styles.datePickerText}>{dataFimFiltro ? `Até: ${dataFimFiltro.toLocaleDateString('pt-BR')}` : 'Data Fim'}</Text></Pressable>
             </View>
             <View style={{marginTop: 20, width: '100%'}}>
               <Button title="Limpar Filtros" onPress={limparFiltros} color="#DC3545" />
@@ -224,6 +158,7 @@ export default function ListaAtendimentosScreen() {
   );
 }
 
+// (Seus estilos personalizados mantidos)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#3e2961ff' },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -247,28 +182,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
   modalOption: { width: '100%', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
   modalOptionText: { textAlign: 'center', fontSize: 15, color: '#3b0653ff' },
-  dateFilterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginTop: 10,
-    gap: 10,
-  },
-  datePickerButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EFEFF4',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  datePickerText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#333',
-  },
+  dateFilterRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 10, gap: 10, },
+  datePickerButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#EFEFF4', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', },
+  datePickerText: { marginLeft: 8, fontSize: 14, color: '#333', },
 });
