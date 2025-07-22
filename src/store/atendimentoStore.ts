@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { Atendimento } from '../types/atendimento';
-// ✅ 1. IMPORTAR AS NOVAS FUNÇÕES DO SQLITE
+// IMPORTAR AS FUNÇÕES DO SQLITE
 import {
   getAtendimentosFromDB,
   addAtendimentoToDB,
@@ -10,7 +10,7 @@ import {
   deleteAtendimentoFromDB,
 } from '../services/databaseService';
 
-// A interface da store continua a mesma
+// interface da store
 interface AtendimentoState {
   atendimentos: Atendimento[];
   isLoading: boolean;
@@ -24,7 +24,7 @@ export const useAtendimentoStore = create<AtendimentoState>((set, get) => ({
   atendimentos: [],
   isLoading: true,
 
-  // ✅ 2. A INICIALIZAÇÃO AGORA BUSCA DO SQLITE
+  // A INICIALIZAÇÃO BUSCA DO SQLITE
   initializeAtendimentos: async () => {
     // Não mostra o loading novamente se já tiver dados
     if (!get().isLoading) {
@@ -36,7 +36,7 @@ export const useAtendimentoStore = create<AtendimentoState>((set, get) => ({
     set({ atendimentos: dadosDoDB, isLoading: false });
   },
 
-  // ✅ 3. AS AÇÕES AGORA SALVAM NO SQLITE E ATUALIZAM A MEMÓRIA
+  // AS AÇÕES SALVAM NO SQLITE E ATUALIZAM A MEMÓRIA
   addAtendimento: async (novoAtendimento) => {
     await addAtendimentoToDB(novoAtendimento);
     // Recarrega a lista da fonte da verdade (o DB) para garantir consistência

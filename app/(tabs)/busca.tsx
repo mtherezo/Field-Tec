@@ -20,7 +20,7 @@ const AtendimentoItem = ({ item }: { item: Atendimento }) => {
     };
 
     return (
-        // O card agora é clicável
+        // O card é clicável
         <Pressable style={styles.itemContainer} onPress={handleNavigate}>
             <View style={styles.itemHeader}>
                 <Text style={styles.itemTitle}>{item.numeroChamado}</Text>
@@ -29,7 +29,7 @@ const AtendimentoItem = ({ item }: { item: Atendimento }) => {
                 </View>
             </View>
 
-            {/* ✅ NOVO BLOCO CONDICIONAL PARA EXIBIR A PENDÊNCIA */}
+            {/* BLOCO CONDICIONAL PARA EXIBIR A PENDÊNCIA */}
             {item.status.includes('Pendente') && item.detalhePendencia && (
                 <View style={styles.pendenciaRow}>
                     <FontAwesome name="info-circle" size={14} color="#B45309" />
@@ -46,7 +46,7 @@ const AtendimentoItem = ({ item }: { item: Atendimento }) => {
     );
 };
 
-// Função de cores (inalterada)
+// Função de cores
 const getStatusColor = (status: string) => {
     if (status === 'Concluído') return '#28a745';
     if (status.includes('Pendente')) return '#ffc107';
@@ -134,7 +134,7 @@ export default function BuscaScreen() {
 }
 
 
-// --- ESTILOS ATUALIZADOS ---
+// ESTILOS
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 

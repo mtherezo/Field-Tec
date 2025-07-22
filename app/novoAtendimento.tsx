@@ -1,20 +1,9 @@
 // app/novoAtendimento.tsx
 
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput as RNTextInput,
-  ScrollView,
-  StyleSheet,
-  Alert,
-  Pressable,
-  Platform,
-  Keyboard,
-} from 'react-native';
+import { View, Text, TextInput as RNTextInput, ScrollView, StyleSheet, Alert, Pressable, Platform, Keyboard,} from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-// ✅ 1. IMPORTAR A NOSSA STORE
 import { useAtendimentoStore } from '@/src/store/atendimentoStore';
 import { Atendimento, statusOptions, Status } from '@/src/types/atendimento';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -26,10 +15,10 @@ export default function FormAtendimentoScreen() {
   const { atendimentoId } = useLocalSearchParams<{ atendimentoId?: string }>();
   const isEditMode = !!atendimentoId;
 
-  // ✅ 2. PEGAR AS AÇÕES E OS DADOS DA STORE
+  // PEGAR AS AÇÕES E OS DADOS DA STORE
   const { addAtendimento, updateAtendimento, atendimentos } = useAtendimentoStore();
 
-  // (Os estados do formulário continuam os mesmos)
+  // Estados do formulário
   const [numeroChamado, setNumeroChamado] = useState('');
   const [numeroLogicoTerminal, setNumeroLogicoTerminal] = useState('');
   const [solicitacao, setSolicitacao] = useState('');
@@ -49,7 +38,7 @@ export default function FormAtendimentoScreen() {
 
   useEffect(() => {
     if (isEditMode) {
-      // ✅ 3. BUSCAR O ATENDIMENTO DIRETAMENTE DA MEMÓRIA (STORE)
+      // BUSCA O ATENDIMENTO DIRETAMENTE DA MEMÓRIA (STORE)
       const atendimentoParaEditar = atendimentos.find(at => at.id === atendimentoId);
       if (atendimentoParaEditar) {
         setNumeroChamado(atendimentoParaEditar.numeroChamado);
@@ -76,7 +65,7 @@ export default function FormAtendimentoScreen() {
       return;
     }
 
-    // ✅ 4. USAR AS AÇÕES DA STORE PARA SALVAR
+    // USAR AS AÇÕES DA STORE PARA SALVAR
     if (isEditMode) {
       const atendimentoAtualizado: Atendimento = {
         id: atendimentoId,
@@ -129,7 +118,7 @@ export default function FormAtendimentoScreen() {
   <Picker
     selectedValue={status}
     onValueChange={(itemValue) => setStatus(itemValue as Status)}
-    style={{ color: 'black' }} // <-- ADICIONADO ESTA LINHA
+    style={{ color: 'black' }} 
   >
     {statusOptions.map((opt) => (
       <Picker.Item key={opt} label={opt} value={opt} />
@@ -163,9 +152,11 @@ export default function FormAtendimentoScreen() {
   );
 }
 
-// (Os estilos continuam os mesmos)
+// Estilos
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#3e2961ff' },
+  safeArea: { flex: 1,
+    backgroundColor: '#3e2961ff'
+  },
   scrollContainer: { flex: 1 },
   scrollContentContainer: { padding: 20, paddingBottom: 40 },
   label: { fontSize: 15, fontWeight: 'bold', marginBottom: 5, color: 'white' },

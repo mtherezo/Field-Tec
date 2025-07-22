@@ -5,7 +5,7 @@ import { Atendimento } from '../types/atendimento';
 import { getAtendimentos as getAtendimentosFromAsyncStorage } from './storageService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ✅ 1. A ABERTURA DO BANCO DE DADOS AGORA É ASSÍNCRONA
+// ABERTURA DO BANCO DE DADOS É ASSÍNCRONA
 const dbPromise = SQLite.openDatabaseAsync('atendimentos.db');
 const MIGRATION_KEY = '@atm-assistente:migration_completed_v2'; // Chave atualizada
 
@@ -59,7 +59,7 @@ export const migrateAsyncStorageToSQLite = async (): Promise<void> => {
     }
 
     const db = await dbPromise;
-    // ✅ 2. A TRANSAÇÃO AGORA É FEITA COM 'withTransactionAsync'
+    // A TRANSAÇÃO É FEITA COM 'withTransactionAsync'
     await db.withTransactionAsync(async () => {
       for (const at of oldData) {
         // O método runAsync é usado para INSERT, UPDATE, DELETE
@@ -96,7 +96,7 @@ export const migrateAsyncStorageToSQLite = async (): Promise<void> => {
 export const getAtendimentosFromDB = async (): Promise<Atendimento[]> => {
   try {
     const db = await dbPromise;
-    // ✅ 3. O MÉTODO 'getAllAsync' É USADO PARA BUSCAR DADOS (SELECT)
+    // MÉTODO 'getAllAsync' É USADO PARA BUSCAR DADOS (SELECT)
     const allRows = await db.getAllAsync<Atendimento>('SELECT * FROM atendimentos');
     return allRows;
   } catch (error) {

@@ -1,9 +1,8 @@
 // app/(tabs)/index.tsx
 
-// ✅ 1. IMPORTAR useEffect
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, Pressable, Alert, Modal, useColorScheme, Button } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { useFocusEffect, Stack, useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -32,22 +31,17 @@ const getStatusColor = (status: string) => {
   return 'orange';
 };
 
-type FiltroDataPredefinido = 'Todos' | 'Este Mês' | 'Mês Passado';
-
 export default function ListaAtendimentosScreen() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   
-  // ✅ 2. PEGAR OS DADOS E A FUNÇÃO DE INICIALIZAÇÃO DA STORE
   const { atendimentos, isLoading, initializeAtendimentos } = useAtendimentoStore();
   
   const [modalVisible, setModalVisible] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState<'Todos' | Status>('Todos');
-  const [filtroDataPredefinido, setFiltroDataPredefinido] = useState<FiltroDataPredefinido>('Todos');
   const [dataInicioFiltro, setDataInicioFiltro] = useState<Date | null>(null);
   const [dataFimFiltro, setDataFimFiltro] = useState<Date | null>(null);
 
-  // ✅ 3. ESTE useEffect RODA UMA VEZ E CARREGA OS DADOS
   useEffect(() => {
     initializeAtendimentos();
   }, []);
@@ -56,16 +50,6 @@ export default function ListaAtendimentosScreen() {
     const statusMatch = filtroStatus === 'Todos' || atendimento.status === filtroStatus;
     if (!statusMatch) return false;
     const dataAtendimento = new Date(atendimento.dataInicio);
-    if (filtroDataPredefinido !== 'Todos') {
-        const hoje = new Date();
-        if (filtroDataPredefinido === 'Este Mês') {
-            return dataAtendimento.getMonth() === hoje.getMonth() && dataAtendimento.getFullYear() === hoje.getFullYear();
-        }
-        if (filtroDataPredefinido === 'Mês Passado') {
-            const mesPassado = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-            return dataAtendimento.getMonth() === mesPassado.getMonth() && dataAtendimento.getFullYear() === mesPassado.getFullYear();
-        }
-    }
     if (dataInicioFiltro && dataFimFiltro) {
         const inicio = new Date(dataInicioFiltro);
         inicio.setHours(0, 0, 0, 0);
@@ -85,7 +69,6 @@ export default function ListaAtendimentosScreen() {
             if (event.type === 'set' && selectedDate) {
                 if (tipo === 'inicio') { setDataInicioFiltro(selectedDate); } 
                 else { setDataFimFiltro(selectedDate); }
-                setFiltroDataPredefinido('Todos');
             }
         }
     });
@@ -93,17 +76,61 @@ export default function ListaAtendimentosScreen() {
 
   const limparFiltros = () => {
     setFiltroStatus('Todos');
-    setFiltroDataPredefinido('Todos');
     setDataInicioFiltro(null);
     setDataFimFiltro(null);
     setModalVisible(false);
   };
+  
+  const getFormattedDate = () => {
+    const today = new Date();
+    const day = String(today.getDate()).padStart(2, '0');
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const year = today.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
 
-  const generateHtmlForPdf = (data: Atendimento[]) => { /* ... sua função de gerar PDF ... */ };
-  const handleExportPdf = async () => { /* ... sua função de exportar PDF ... */ };
-  const handleExportXlsx = async () => { /* ... sua função de exportar XLSX ... */ };
+  const generateHtmlForPdf = (data: Atendimento[]) => {
+    const atendimentosHtml = data.map(at => `
+      <tr>
+        <td>${at.numeroChamado}</td><td>${at.numeroLogicoTerminal}</td><td>${at.status}</td>
+        <td>${at.detalhePendencia || ''}</td><td>${new Date(at.dataInicio).toLocaleDateString('pt-BR')}</td>
+      </tr>`).join('');
+    return `
+      <html><head><style>body{font-family:Helvetica,sans-serif;color:#333}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;text-align:left;padding:8px;font-size:10px}th{background-color:#f2f2f2}h1{text-align:center;color:#3e2961ff}p{font-size:12px}</style></head>
+      <body><h1>Relatório de Atendimentos</h1><p><strong>Filtro Aplicado:</strong> ${filtroStatus} | Período: ${(dataInicioFiltro && dataFimFiltro ? `${dataInicioFiltro.toLocaleDateString('pt-BR')} a ${dataFimFiltro.toLocaleDateString('pt-BR')}`: 'Todos')}</p><p><strong>Total de Registros:</strong> ${data.length}</p>
+      <table><thead><tr><th>Chamado</th><th>Terminal</th><th>Status</th><th>Detalhe Pendência</th><th>Data</th></tr></thead><tbody>${atendimentosHtml}</tbody></table></body></html>`;
+  };
 
-  const isFiltroAtivo = filtroStatus !== 'Todos' || filtroDataPredefinido !== 'Todos' || (!!dataInicioFiltro && !!dataFimFiltro);
+  // ✅ FUNÇÃO DE EXPORTAR PDF CORRIGIDA
+  const handleExportPdf = async () => {
+    const data = atendimentosFiltrados;
+    if (data.length === 0) { Alert.alert("Sem Dados", "Não há atendimentos para exportar em PDF."); return; }
+    try {
+      const { uri: tempUri } = await Print.printToFileAsync({ html: generateHtmlForPdf(data) });
+      const pdfName = `Relatorio_Atendimentos_${getFormattedDate()}.pdf`;
+      const newUri = FileSystem.documentDirectory + pdfName;
+      await FileSystem.moveAsync({ from: tempUri, to: newUri });
+      await Sharing.shareAsync(newUri, { mimeType: 'application/pdf', dialogTitle: 'Exportar Relatório PDF' });
+    } catch (error) { Alert.alert("Erro", "Não foi possível gerar o arquivo PDF."); }
+  };
+
+  const handleExportXlsx = async () => {
+    const data = atendimentosFiltrados;
+    if (data.length === 0) { Alert.alert("Sem Dados", "Não há atendimentos para exportar."); return; }
+    const header = ["Chamado", "Terminal", "Status", "Motivo", "Detalhe Pendência", "Causa Real", "Data Início", "Data Fim"];
+    const rows = data.map(at => [ at.numeroChamado, at.numeroLogicoTerminal, at.status, at.solicitacao, at.detalhePendencia || '', at.causaReal, new Date(at.dataInicio).toLocaleString('pt-BR'), at.dataFim ? new Date(at.dataFim).toLocaleString('pt-BR') : '' ]);
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Atendimentos");
+    const base64 = XLSX.write(wb, { type: "base64" });
+    const filename = FileSystem.documentDirectory + `Relatorio_Atendimentos_${getFormattedDate()}.xlsx`;
+    try {
+      await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
+      await Sharing.shareAsync(filename, { mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', dialogTitle: 'Exportar Relatório Excel' });
+    } catch (error) { Alert.alert("Erro", "Não foi possível gerar o arquivo Excel."); }
+  };
+
+  const isFiltroAtivo = filtroStatus !== 'Todos' || (!!dataInicioFiltro && !!dataFimFiltro);
 
   if (isLoading) {
     return <ActivityIndicator size="large" style={styles.loader} />;
@@ -116,8 +143,6 @@ export default function ListaAtendimentosScreen() {
           <View style={styles.modalView}>
             <Text style={styles.modalTitle}>Filtrar por Status</Text>
             {['Todos', ...statusOptions].map(status => (<Pressable key={status} style={styles.modalOption} onPress={() => { setFiltroStatus(status as any); setModalVisible(false); }}><Text style={styles.modalOptionText}>{status}</Text></Pressable>))}
-            <Text style={[styles.modalTitle, { marginTop: 20 }]}>Filtros Rápidos</Text>
-            {(['Todos', 'Este Mês', 'Mês Passado'] as FiltroDataPredefinido[]).map(periodo => (<Pressable key={periodo} style={styles.modalOption} onPress={() => { setFiltroDataPredefinido(periodo); setDataInicioFiltro(null); setDataFimFiltro(null); setModalVisible(false); }}><Text style={styles.modalOptionText}>{periodo}</Text></Pressable>))}
             <Text style={[styles.modalTitle, { marginTop: 20 }]}>Filtrar por Período</Text>
             <View style={styles.dateFilterRow}>
                 <Pressable style={styles.datePickerButton} onPress={() => showDateFilterPicker('inicio')}><FontAwesome name="calendar" size={16} color="#333" /><Text style={styles.datePickerText}>{dataInicioFiltro ? `De: ${dataInicioFiltro.toLocaleDateString('pt-BR')}` : 'Data Início'}</Text></Pressable>
