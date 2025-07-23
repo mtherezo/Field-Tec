@@ -35,6 +35,14 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="search" color={color} />,
         }}
       />
+      {/* ✅ NOVA ABA ADICIONADA */}
+      <Tabs.Screen
+        name="relatorios" // Corresponde ao arquivo relatorios.tsx
+        options={{
+          title: 'Relatórios',
+          tabBarIcon: ({ color }) => <TabBarIcon name="bar-chart" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

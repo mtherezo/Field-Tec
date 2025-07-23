@@ -9,6 +9,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as XLSX from 'xlsx';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import * as DocumentPicker from 'expo-document-picker';
 
 import { useAtendimentoStore } from '@/src/store/atendimentoStore';
 import { Atendimento, Status, statusOptions } from '@/src/types/atendimento';
@@ -35,7 +36,7 @@ export default function ListaAtendimentosScreen() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   
-  const { atendimentos, isLoading, initializeAtendimentos } = useAtendimentoStore();
+  const { atendimentos, isLoading, initializeAtendimentos, addAtendimento } = useAtendimentoStore();
   
   const [modalVisible, setModalVisible] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState<'Todos' | Status>('Todos');
@@ -101,7 +102,6 @@ export default function ListaAtendimentosScreen() {
       <table><thead><tr><th>Chamado</th><th>Terminal</th><th>Status</th><th>Detalhe Pendência</th><th>Data</th></tr></thead><tbody>${atendimentosHtml}</tbody></table></body></html>`;
   };
 
-  // ✅ FUNÇÃO DE EXPORTAR PDF CORRIGIDA
   const handleExportPdf = async () => {
     const data = atendimentosFiltrados;
     if (data.length === 0) { Alert.alert("Sem Dados", "Não há atendimentos para exportar em PDF."); return; }
@@ -128,6 +128,58 @@ export default function ListaAtendimentosScreen() {
       await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
       await Sharing.shareAsync(filename, { mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', dialogTitle: 'Exportar Relatório Excel' });
     } catch (error) { Alert.alert("Erro", "Não foi possível gerar o arquivo Excel."); }
+  };
+
+  const handleImportXlsx = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const fileUri = result.assets[0].uri;
+      const fileContent = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
+      
+      const wb = XLSX.read(fileContent, { type: 'base64' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+      if (data.length < 2) {
+        Alert.alert("Erro", "Arquivo vazio ou inválido.");
+        return;
+      }
+
+      const rows = data.slice(1);
+      let importadosComSucesso = 0;
+
+      // ✅ CORREÇÃO: DIZEMOS AO TYPESCRIPT QUE CADA 'row' É UM ARRAY DE 'any'
+      for (const row of rows as any[]) {
+        const novoAtendimento: Atendimento = {
+          id: Date.now().toString() + Math.random(),
+          numeroChamado: String(row[0] || ''),
+          numeroLogicoTerminal: String(row[1] || ''),
+          status: (statusOptions.includes(row[2]) ? row[2] : 'Em andamento') as Status,
+          solicitacao: String(row[3] || ''),
+          detalhePendencia: String(row[4] || ''),
+          causaReal: String(row[5] || ''),
+          dataInicio: new Date(row[6] || Date.now()).toISOString(),
+          dataFim: row[7] ? new Date(row[7]).toISOString() : null,
+          diagnosticoSolucao: '',
+        };
+        await addAtendimento(novoAtendimento);
+        importadosComSucesso++;
+      }
+
+      Alert.alert("Sucesso!", `${importadosComSucesso} atendimentos foram importados com sucesso.`);
+
+    } catch (error) {
+      console.error("Erro ao importar XLSX:", error);
+      Alert.alert("Erro", "Não foi possível importar o arquivo. Verifique o formato.");
+    }
   };
 
   const isFiltroAtivo = filtroStatus !== 'Todos' || (!!dataInicioFiltro && !!dataFimFiltro);
@@ -162,6 +214,9 @@ export default function ListaAtendimentosScreen() {
             const iconColor = colorScheme === 'dark' ? 'white' : 'black';
             return (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 22 }}>
+                <Pressable onPress={handleImportXlsx}>
+                  <FontAwesome name="cloud-upload" size={26} color={iconColor} />
+                </Pressable>
                 <Pressable onPress={() => setModalVisible(true)}><FontAwesome name="filter" size={24} color={isFiltroAtivo ? '#007AFF' : iconColor} /></Pressable>
                 <Pressable onPress={handleExportPdf}><FontAwesome name="file-pdf-o" size={24} color="#DC3545" /></Pressable>
                 <Pressable onPress={handleExportXlsx}><FontAwesome name="file-excel-o" size={24} color="#28a745" /></Pressable>
