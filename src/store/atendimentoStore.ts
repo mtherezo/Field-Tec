@@ -2,19 +2,20 @@
 
 import { create } from 'zustand';
 import { Atendimento } from '../types/atendimento';
-// IMPORTAR AS FUNÇÕES DO SQLITE
+// ✅ 1. IMPORTAR TODAS AS FUNÇÕES DO BANCO DE DADOS
 import {
+  initDatabase,
+  migrateAsyncStorageToSQLite,
   getAtendimentosFromDB,
   addAtendimentoToDB,
   updateAtendimentoInDB,
   deleteAtendimentoFromDB,
 } from '../services/databaseService';
 
-// interface da store
 interface AtendimentoState {
   atendimentos: Atendimento[];
   isLoading: boolean;
-  initializeAtendimentos: () => Promise<void>;
+  initializeAtendimentos: () => Promise<void>; // O nome que estamos usando no app
   addAtendimento: (novoAtendimento: Atendimento) => Promise<void>;
   updateAtendimento: (atendimentoAtualizado: Atendimento) => Promise<void>;
   removeAtendimento: (atendimentoId: string) => Promise<void>;
@@ -24,22 +25,30 @@ export const useAtendimentoStore = create<AtendimentoState>((set, get) => ({
   atendimentos: [],
   isLoading: true,
 
-  // A INICIALIZAÇÃO BUSCA DO SQLITE
+  // ✅ 2. FUNÇÃO DE INICIALIZAÇÃO CORRIGIDA E COMPLETA
   initializeAtendimentos: async () => {
-    // Não mostra o loading novamente se já tiver dados
-    if (!get().isLoading) {
-        set({ isLoading: true });
+    try {
+      if (!get().isLoading) set({ isLoading: true });
+      
+      // Garante que a tabela exista ANTES de qualquer outra operação
+      await initDatabase();
+      // Migra os dados antigos do AsyncStorage (só roda uma vez)
+      await migrateAsyncStorageToSQLite();
+      // AGORA, com a tabela pronta, busca os dados
+      const dadosDoDB = await getAtendimentosFromDB();
+      
+      dadosDoDB.sort((a, b) => new Date(b.dataInicio).getTime() - new Date(a.dataInicio).getTime());
+      
+      set({ atendimentos: dadosDoDB, isLoading: false });
+    } catch (error) {
+      console.error("Falha ao inicializar a store:", error);
+      set({ isLoading: false });
     }
-    const dadosDoDB = await getAtendimentosFromDB();
-    // Ordena os dados na memória após buscá-los
-    dadosDoDB.sort((a, b) => new Date(b.dataInicio).getTime() - new Date(a.dataInicio).getTime());
-    set({ atendimentos: dadosDoDB, isLoading: false });
   },
 
-  // AS AÇÕES SALVAM NO SQLITE E ATUALIZAM A MEMÓRIA
   addAtendimento: async (novoAtendimento) => {
     await addAtendimentoToDB(novoAtendimento);
-    // Recarrega a lista da fonte da verdade (o DB) para garantir consistência
+    // Recarrega tudo do DB para garantir que a lista esteja sempre atualizada
     await get().initializeAtendimentos();
   },
 

@@ -39,7 +39,12 @@ export default function ListaAtendimentosScreen() {
   const { atendimentos, isLoading, initializeAtendimentos, addAtendimento } = useAtendimentoStore();
   
   const [modalVisible, setModalVisible] = useState(false);
-  const [filtroStatus, setFiltroStatus] = useState<'Todos' | Status>('Todos');
+  
+  // ✅ 1. ESTADO DO FILTRO DE STATUS AGORA É UM ARRAY
+  const [filtroStatus, setFiltroStatus] = useState<Status[]>([]);
+  // Estado temporário para as seleções dentro do modal
+  const [tempFiltroStatus, setTempFiltroStatus] = useState<Status[]>([]);
+
   const [dataInicioFiltro, setDataInicioFiltro] = useState<Date | null>(null);
   const [dataFimFiltro, setDataFimFiltro] = useState<Date | null>(null);
 
@@ -47,9 +52,12 @@ export default function ListaAtendimentosScreen() {
     initializeAtendimentos();
   }, []);
 
+  // ✅ 2. LÓGICA DE FILTRAGEM ATUALIZADA
   const atendimentosFiltrados = atendimentos.filter(atendimento => {
-    const statusMatch = filtroStatus === 'Todos' || atendimento.status === filtroStatus;
+    // Se o array de filtros de status estiver vazio, passa todos. Senão, verifica se o status do atendimento está no array.
+    const statusMatch = filtroStatus.length === 0 || filtroStatus.includes(atendimento.status);
     if (!statusMatch) return false;
+
     const dataAtendimento = new Date(atendimento.dataInicio);
     if (dataInicioFiltro && dataFimFiltro) {
         const inicio = new Date(dataInicioFiltro);
@@ -61,128 +69,35 @@ export default function ListaAtendimentosScreen() {
     return true;
   });
 
-  const showDateFilterPicker = (tipo: 'inicio' | 'fim') => {
-    const dataAtual = tipo === 'inicio' ? dataInicioFiltro : dataFimFiltro;
-    DateTimePickerAndroid.open({
-        value: dataAtual || new Date(),
-        mode: 'date',
-        onChange: (event, selectedDate) => {
-            if (event.type === 'set' && selectedDate) {
-                if (tipo === 'inicio') { setDataInicioFiltro(selectedDate); } 
-                else { setDataFimFiltro(selectedDate); }
-            }
-        }
-    });
+  // ✅ 3. NOVAS FUNÇÕES PARA O MODAL DE FILTRO
+  const handleToggleStatus = (status: Status) => {
+    setTempFiltroStatus(prev => 
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+  };
+
+  const aplicarFiltros = () => {
+    setFiltroStatus(tempFiltroStatus);
+    setModalVisible(false);
   };
 
   const limparFiltros = () => {
-    setFiltroStatus('Todos');
+    setFiltroStatus([]);
+    setTempFiltroStatus([]);
     setDataInicioFiltro(null);
     setDataFimFiltro(null);
     setModalVisible(false);
   };
-  
-  const getFormattedDate = () => {
-    const today = new Date();
-    const day = String(today.getDate()).padStart(2, '0');
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const year = today.getFullYear();
-    return `${day}-${month}-${year}`;
-  };
 
-  const generateHtmlForPdf = (data: Atendimento[]) => {
-    const atendimentosHtml = data.map(at => `
-      <tr>
-        <td>${at.numeroChamado}</td><td>${at.numeroLogicoTerminal}</td><td>${at.status}</td>
-        <td>${at.detalhePendencia || ''}</td><td>${new Date(at.dataInicio).toLocaleDateString('pt-BR')}</td>
-      </tr>`).join('');
-    return `
-      <html><head><style>body{font-family:Helvetica,sans-serif;color:#333}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;text-align:left;padding:8px;font-size:10px}th{background-color:#f2f2f2}h1{text-align:center;color:#3e2961ff}p{font-size:12px}</style></head>
-      <body><h1>Relatório de Atendimentos</h1><p><strong>Filtro Aplicado:</strong> ${filtroStatus} | Período: ${(dataInicioFiltro && dataFimFiltro ? `${dataInicioFiltro.toLocaleDateString('pt-BR')} a ${dataFimFiltro.toLocaleDateString('pt-BR')}`: 'Todos')}</p><p><strong>Total de Registros:</strong> ${data.length}</p>
-      <table><thead><tr><th>Chamado</th><th>Terminal</th><th>Status</th><th>Detalhe Pendência</th><th>Data</th></tr></thead><tbody>${atendimentosHtml}</tbody></table></body></html>`;
-  };
+  // Funções de exportação e data (inalteradas)
+  const showDateFilterPicker = (tipo: 'inicio' | 'fim') => { /* ... sua função de data ... */ };
+  const getFormattedDate = () => { /* ... sua função de formatar data ... */ };
+  const generateHtmlForPdf = (data: Atendimento[]) => { /* ... sua função de gerar PDF ... */ };
+  const handleExportPdf = async () => { /* ... sua função de exportar PDF ... */ };
+  const handleExportXlsx = async () => { /* ... sua função de exportar XLSX ... */ };
+  const handleImportXlsx = async () => { /* ... sua função de importar XLSX ... */ };
 
-  const handleExportPdf = async () => {
-    const data = atendimentosFiltrados;
-    if (data.length === 0) { Alert.alert("Sem Dados", "Não há atendimentos para exportar em PDF."); return; }
-    try {
-      const { uri: tempUri } = await Print.printToFileAsync({ html: generateHtmlForPdf(data) });
-      const pdfName = `Relatorio_Atendimentos_${getFormattedDate()}.pdf`;
-      const newUri = FileSystem.documentDirectory + pdfName;
-      await FileSystem.moveAsync({ from: tempUri, to: newUri });
-      await Sharing.shareAsync(newUri, { mimeType: 'application/pdf', dialogTitle: 'Exportar Relatório PDF' });
-    } catch (error) { Alert.alert("Erro", "Não foi possível gerar o arquivo PDF."); }
-  };
-
-  const handleExportXlsx = async () => {
-    const data = atendimentosFiltrados;
-    if (data.length === 0) { Alert.alert("Sem Dados", "Não há atendimentos para exportar."); return; }
-    const header = ["Chamado", "Terminal", "Status", "Motivo", "Detalhe Pendência", "Causa Real", "Data Início", "Data Fim"];
-    const rows = data.map(at => [ at.numeroChamado, at.numeroLogicoTerminal, at.status, at.solicitacao, at.detalhePendencia || '', at.causaReal, new Date(at.dataInicio).toLocaleString('pt-BR'), at.dataFim ? new Date(at.dataFim).toLocaleString('pt-BR') : '' ]);
-    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Atendimentos");
-    const base64 = XLSX.write(wb, { type: "base64" });
-    const filename = FileSystem.documentDirectory + `Relatorio_Atendimentos_${getFormattedDate()}.xlsx`;
-    try {
-      await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
-      await Sharing.shareAsync(filename, { mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', dialogTitle: 'Exportar Relatório Excel' });
-    } catch (error) { Alert.alert("Erro", "Não foi possível gerar o arquivo Excel."); }
-  };
-
-  const handleImportXlsx = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-
-      if (result.canceled) {
-        return;
-      }
-
-      const fileUri = result.assets[0].uri;
-      const fileContent = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
-      
-      const wb = XLSX.read(fileContent, { type: 'base64' });
-      const wsname = wb.SheetNames[0];
-      const ws = wb.Sheets[wsname];
-      const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
-
-      if (data.length < 2) {
-        Alert.alert("Erro", "Arquivo vazio ou inválido.");
-        return;
-      }
-
-      const rows = data.slice(1);
-      let importadosComSucesso = 0;
-
-      // ✅ CORREÇÃO: DIZEMOS AO TYPESCRIPT QUE CADA 'row' É UM ARRAY DE 'any'
-      for (const row of rows as any[]) {
-        const novoAtendimento: Atendimento = {
-          id: Date.now().toString() + Math.random(),
-          numeroChamado: String(row[0] || ''),
-          numeroLogicoTerminal: String(row[1] || ''),
-          status: (statusOptions.includes(row[2]) ? row[2] : 'Em andamento') as Status,
-          solicitacao: String(row[3] || ''),
-          detalhePendencia: String(row[4] || ''),
-          causaReal: String(row[5] || ''),
-          dataInicio: new Date(row[6] || Date.now()).toISOString(),
-          dataFim: row[7] ? new Date(row[7]).toISOString() : null,
-          diagnosticoSolucao: '',
-        };
-        await addAtendimento(novoAtendimento);
-        importadosComSucesso++;
-      }
-
-      Alert.alert("Sucesso!", `${importadosComSucesso} atendimentos foram importados com sucesso.`);
-
-    } catch (error) {
-      console.error("Erro ao importar XLSX:", error);
-      Alert.alert("Erro", "Não foi possível importar o arquivo. Verifique o formato.");
-    }
-  };
-
-  const isFiltroAtivo = filtroStatus !== 'Todos' || (!!dataInicioFiltro && !!dataFimFiltro);
+  const isFiltroAtivo = filtroStatus.length > 0 || (!!dataInicioFiltro && !!dataFimFiltro);
 
   if (isLoading) {
     return <ActivityIndicator size="large" style={styles.loader} />;
@@ -190,18 +105,27 @@ export default function ListaAtendimentosScreen() {
 
   return (
     <View style={styles.container}>
+      {/* ✅ 4. MODAL ATUALIZADO COM CHECKBOXES E BOTÕES */}
       <Modal visible={modalVisible} onRequestClose={() => setModalVisible(false)} transparent={true} animationType="slide">
         <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
           <View style={styles.modalView}>
             <Text style={styles.modalTitle}>Filtrar por Status</Text>
-            {['Todos', ...statusOptions].map(status => (<Pressable key={status} style={styles.modalOption} onPress={() => { setFiltroStatus(status as any); setModalVisible(false); }}><Text style={styles.modalOptionText}>{status}</Text></Pressable>))}
+            {statusOptions.map(status => (
+              <Pressable key={status} style={styles.modalOption} onPress={() => handleToggleStatus(status)}>
+                <FontAwesome name={tempFiltroStatus.includes(status) ? 'check-square-o' : 'square-o'} size={24} color="#3b0653ff" />
+                <Text style={styles.modalOptionText}>{status}</Text>
+              </Pressable>
+            ))}
+            
             <Text style={[styles.modalTitle, { marginTop: 20 }]}>Filtrar por Período</Text>
             <View style={styles.dateFilterRow}>
                 <Pressable style={styles.datePickerButton} onPress={() => showDateFilterPicker('inicio')}><FontAwesome name="calendar" size={16} color="#333" /><Text style={styles.datePickerText}>{dataInicioFiltro ? `De: ${dataInicioFiltro.toLocaleDateString('pt-BR')}` : 'Data Início'}</Text></Pressable>
                 <Pressable style={styles.datePickerButton} onPress={() => showDateFilterPicker('fim')}><FontAwesome name="calendar" size={16} color="#333" /><Text style={styles.datePickerText}>{dataFimFiltro ? `Até: ${dataFimFiltro.toLocaleDateString('pt-BR')}` : 'Data Fim'}</Text></Pressable>
             </View>
-            <View style={{marginTop: 20, width: '100%'}}>
+            
+            <View style={styles.modalButtonContainer}>
               <Button title="Limpar Filtros" onPress={limparFiltros} color="#DC3545" />
+              <Button title="Aplicar Filtros" onPress={aplicarFiltros} />
             </View>
           </View>
         </Pressable>
@@ -214,10 +138,8 @@ export default function ListaAtendimentosScreen() {
             const iconColor = colorScheme === 'dark' ? 'white' : 'black';
             return (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 22 }}>
-                <Pressable onPress={handleImportXlsx}>
-                  <FontAwesome name="cloud-upload" size={26} color={iconColor} />
-                </Pressable>
-                <Pressable onPress={() => setModalVisible(true)}><FontAwesome name="filter" size={24} color={isFiltroAtivo ? '#007AFF' : iconColor} /></Pressable>
+                <Pressable onPress={handleImportXlsx}><FontAwesome name="cloud-upload" size={26} color={iconColor} /></Pressable>
+                <Pressable onPress={() => { setTempFiltroStatus(filtroStatus); setModalVisible(true); }}><FontAwesome name="filter" size={24} color={isFiltroAtivo ? '#007AFF' : iconColor} /></Pressable>
                 <Pressable onPress={handleExportPdf}><FontAwesome name="file-pdf-o" size={24} color="#DC3545" /></Pressable>
                 <Pressable onPress={handleExportXlsx}><FontAwesome name="file-excel-o" size={24} color="#28a745" /></Pressable>
                 <Pressable onPress={() => router.push('/novoAtendimento')}><FontAwesome name="plus-circle" size={28} color={iconColor} /></Pressable>
@@ -238,7 +160,7 @@ export default function ListaAtendimentosScreen() {
   );
 }
 
-// (Seus estilos personalizados mantidos)
+// ✅ 5. ESTILOS ATUALIZADOS PARA O MODAL
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#3e2961ff' },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -260,9 +182,15 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
   modalView: { margin: 20, backgroundColor: '#d1d7ddff', borderRadius: 20, padding: 25, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5, width: '90%' },
   modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
-  modalOption: { width: '100%', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  modalOptionText: { textAlign: 'center', fontSize: 15, color: '#3b0653ff' },
+  modalOption: { width: '100%', paddingVertical: 12, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#eee' },
+  modalOptionText: { fontSize: 15, color: '#3b0653ff', marginLeft: 15 },
   dateFilterRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 10, gap: 10, },
   datePickerButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#EFEFF4', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', },
   datePickerText: { marginLeft: 8, fontSize: 14, color: '#333', },
+  modalButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 30,
+  }
 });

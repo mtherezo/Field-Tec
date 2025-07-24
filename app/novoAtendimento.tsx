@@ -1,7 +1,17 @@
 // app/novoAtendimento.tsx
 
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput as RNTextInput, ScrollView, StyleSheet, Alert, Pressable, Platform, Keyboard,} from 'react-native';
+import {
+  View,
+  Text,
+  TextInput as RNTextInput,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  Pressable,
+  Platform,
+  Keyboard,
+} from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { useAtendimentoStore } from '@/src/store/atendimentoStore';
@@ -15,10 +25,9 @@ export default function FormAtendimentoScreen() {
   const { atendimentoId } = useLocalSearchParams<{ atendimentoId?: string }>();
   const isEditMode = !!atendimentoId;
 
-  // PEGAR AS AÇÕES E OS DADOS DA STORE
   const { addAtendimento, updateAtendimento, atendimentos } = useAtendimentoStore();
 
-  // Estados do formulário
+  // (Estados e refs continuam os mesmos)
   const [numeroChamado, setNumeroChamado] = useState('');
   const [numeroLogicoTerminal, setNumeroLogicoTerminal] = useState('');
   const [solicitacao, setSolicitacao] = useState('');
@@ -28,7 +37,6 @@ export default function FormAtendimentoScreen() {
   const [detalhePendencia, setDetalhePendencia] = useState('');
   const [dataInicio, setDataInicio] = useState(new Date());
   const [dataFim, setDataFim] = useState<Date | null>(null);
-
   const isPendente = status.includes('Pendente');
   const numeroLogicoTerminalRef = useRef<RNTextInput>(null);
   const solicitacaoRef = useRef<RNTextInput>(null);
@@ -38,7 +46,6 @@ export default function FormAtendimentoScreen() {
 
   useEffect(() => {
     if (isEditMode) {
-      // BUSCA O ATENDIMENTO DIRETAMENTE DA MEMÓRIA (STORE)
       const atendimentoParaEditar = atendimentos.find(at => at.id === atendimentoId);
       if (atendimentoParaEditar) {
         setNumeroChamado(atendimentoParaEditar.numeroChamado);
@@ -53,45 +60,55 @@ export default function FormAtendimentoScreen() {
         else { setDataFim(null); }
       }
     }
-  }, [atendimentoId, isEditMode, atendimentos]); // Adicionado 'atendimentos' à dependência
+  }, [atendimentoId, isEditMode, atendimentos]);
 
   const showDateTimePicker = (currentDate: Date, setDateFunction: (date: Date) => void, mode: 'date' | 'time') => {
     DateTimePickerAndroid.open({ value: currentDate, onChange: (e, d) => setDateFunction(d || currentDate), mode, is24Hour: true });
   };
 
+  // ✅ FUNÇÃO handleSave ATUALIZADA COM try/catch
   const handleSave = async () => {
     if (!numeroChamado.trim() || !numeroLogicoTerminal.trim()) {
       Alert.alert('Atenção', 'Número do Chamado e Número Lógico são obrigatórios.');
       return;
     }
 
-    // USAR AS AÇÕES DA STORE PARA SALVAR
-    if (isEditMode) {
-      const atendimentoAtualizado: Atendimento = {
-        id: atendimentoId,
-        numeroChamado, numeroLogicoTerminal, solicitacao, diagnosticoSolucao, causaReal, status,
-        detalhePendencia: isPendente ? detalhePendencia : '',
-        dataInicio: dataInicio.toISOString(),
-        dataFim: dataFim ? dataFim.toISOString() : null,
-      };
-      await updateAtendimento(atendimentoAtualizado);
-    } else {
-      const novoAtendimento: Atendimento = {
-        id: Date.now().toString(), // Poderíamos usar UUID aqui também
-        numeroChamado, numeroLogicoTerminal, solicitacao, diagnosticoSolucao, causaReal, status,
-        detalhePendencia: isPendente ? detalhePendencia : '',
-        dataInicio: dataInicio.toISOString(),
-        dataFim: dataFim ? dataFim.toISOString() : null,
-      };
-      await addAtendimento(novoAtendimento);
-    }
+    try {
+      if (isEditMode) {
+        const atendimentoAtualizado: Atendimento = {
+          id: atendimentoId,
+          numeroChamado, numeroLogicoTerminal, solicitacao, diagnosticoSolucao, causaReal, status,
+          detalhePendencia: isPendente ? detalhePendencia : '',
+          dataInicio: dataInicio.toISOString(),
+          dataFim: dataFim ? dataFim.toISOString() : null,
+        };
+        await updateAtendimento(atendimentoAtualizado);
+      } else {
+        const novoAtendimento: Atendimento = {
+          id: Date.now().toString(),
+          numeroChamado, numeroLogicoTerminal, solicitacao, diagnosticoSolucao, causaReal, status,
+          detalhePendencia: isPendente ? detalhePendencia : '',
+          dataInicio: dataInicio.toISOString(),
+          dataFim: dataFim ? dataFim.toISOString() : null,
+        };
+        await addAtendimento(novoAtendimento);
+      }
 
-    Alert.alert('Sucesso!', `Atendimento ${isEditMode ? 'atualizado' : 'cadastrado'}.`, [
-      { text: 'OK', onPress: () => {
-        if (isEditMode) { router.replace({ pathname: "/atendimento/[id]", params: { id: atendimentoId } }); } 
-        else { router.replace("/(tabs)"); }
-      }},
-    ]);
+      Alert.alert('Sucesso!', `Atendimento ${isEditMode ? 'atualizado' : 'cadastrado'}.`, [
+        { text: 'OK', onPress: () => {
+          if (isEditMode) { router.replace({ pathname: "/atendimento/[id]", params: { id: atendimentoId } }); } 
+          else { router.replace("/(tabs)"); }
+        }},
+      ]);
+
+    } catch (error: any) {
+      // Se qualquer coisa falhar, este alerta vai aparecer
+      console.error("ERRO CRÍTICO AO SALVAR:", error);
+      Alert.alert(
+        "Erro ao Salvar",
+        `Ocorreu um erro inesperado. Por favor, reporte esta mensagem: ${error.message}`
+      );
+    }
   };
 
   return (
@@ -115,16 +132,10 @@ export default function FormAtendimentoScreen() {
         <RNTextInput ref={causaRealRef} style={styles.input} value={causaReal} onChangeText={setCausaReal} returnKeyType={isPendente ? "next" : "done"} onSubmitEditing={() => { if (isPendente) { detalhePendenciaRef.current?.focus(); } else { Keyboard.dismiss(); } }} blurOnSubmit={false} />
         <Text style={styles.label}>Status</Text>
         <View style={styles.pickerContainer}>
-  <Picker
-    selectedValue={status}
-    onValueChange={(itemValue) => setStatus(itemValue as Status)}
-    style={{ color: 'black' }} 
-  >
-    {statusOptions.map((opt) => (
-      <Picker.Item key={opt} label={opt} value={opt} />
-    ))}
-  </Picker>
-</View>
+          <Picker selectedValue={status} onValueChange={(itemValue) => setStatus(itemValue as Status)}>
+            {statusOptions.map((opt) => (<Picker.Item key={opt} label={opt} value={opt} />))}
+          </Picker>
+        </View>
         {isPendente && (
           <>
             <Text style={styles.label}>Qual a Pendência?</Text>
@@ -152,23 +163,13 @@ export default function FormAtendimentoScreen() {
   );
 }
 
-// Estilos
 const styles = StyleSheet.create({
-  safeArea: { flex: 1,
-    backgroundColor: '#3e2961ff'
-  },
+  safeArea: { flex: 1, backgroundColor: '#3e2961ff' },
   scrollContainer: { flex: 1 },
   scrollContentContainer: { padding: 20, paddingBottom: 40 },
   label: { fontSize: 15, fontWeight: 'bold', marginBottom: 5, color: 'white' },
   input: { backgroundColor: '#c7d8c4ff', color: 'black', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', fontSize: 15, marginBottom: 10 },
-  pickerContainer: { 
-    backgroundColor: '#c7d8c4ff', 
-    borderRadius: 8, 
-    borderWidth: 1, 
-    borderColor: '#ddd', 
-    marginBottom: 10,
-        
-  },
+  pickerContainer: { backgroundColor: '#c7d8c4ff', borderRadius: 8, borderWidth: 1, borderColor: '#ddd', marginBottom: 10 },
   dateDisplay: { fontSize: 15, textAlign: 'center', backgroundColor: '#c7d8c4ff', padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', marginBottom: 10 },
   dateButtonsContainer: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   button: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 12, borderRadius: 8, elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.22, shadowRadius: 2.22 },
@@ -178,10 +179,4 @@ const styles = StyleSheet.create({
   buttonText: { color: 'white', fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
   secondaryButtonText: { color: '#007AFF' },
   clearButtonText: { color: '#DC3545' },
-  pickerText: {
-    color: 'black',
-    fontSize: 15,
-    fontWeight: 'bold',
-    
-  },
 });

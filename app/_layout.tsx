@@ -5,13 +5,15 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { useAtendimentoStore } from '@/src/store/atendimentoStore';
 
 export { ErrorBoundary } from 'expo-router';
 export const unstable_settings = { initialRouteName: '(tabs)' };
+
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -20,17 +22,40 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
+  const [appIsReady, setAppIsReady] = useState(false);
+  // ✅ NOME DA CONSTANTE CORRIGIDO PARA CONSISTÊNCIA
+  const initializeAtendimentos = useAtendimentoStore(s => s.initializeAtendimentos);
+
+  useEffect(() => {
+    async function prepareApp() {
+      try {
+        console.log("Iniciando preparação do app...");
+        // ✅ CHAMANDO A FUNÇÃO COM O NOME CORRETO
+        await initializeAtendimentos();
+        console.log("Banco de dados e store prontos.");
+      } catch (e) {
+        console.warn("Erro na preparação do app:", e);
+      } finally {
+        setAppIsReady(true);
+        console.log("App está pronto.");
+      }
+    }
+
+    prepareApp();
+  }, []);
+
   useEffect(() => {
     if (error) throw error;
   }, [error]);
 
   useEffect(() => {
-    if (loaded) {
+    if (loaded && appIsReady) {
+      console.log("Escondendo a tela de splash.");
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [loaded, appIsReady]);
 
-  if (!loaded) {
+  if (!loaded || !appIsReady) {
     return null;
   }
 
@@ -39,8 +64,6 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-
-  // A lógica de inicializar o banco de dados foi REMOVIDA daqui.
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

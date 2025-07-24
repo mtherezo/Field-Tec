@@ -2,7 +2,7 @@
   "expo": {
     "name": "Field-Tec",
     "slug": "Field-Tec",
-    "version": "2.2.0",
+    "version": "2.2.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "fieldtec",

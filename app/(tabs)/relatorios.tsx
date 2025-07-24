@@ -7,7 +7,6 @@ import { useAtendimentoStore } from '@/src/store/atendimentoStore';
 import { Atendimento } from '@/src/types/atendimento';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome } from '@expo/vector-icons';
-
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
