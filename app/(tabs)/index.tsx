@@ -36,13 +36,11 @@ export default function ListaAtendimentosScreen() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   
-  const { atendimentos, isLoading, initializeAtendimentos, addAtendimento } = useAtendimentoStore();
+  const { atendimentos, isLoading, initializeAtendimentos, addAtendimento, clearAllAtendimentos } = useAtendimentoStore();
   
   const [modalVisible, setModalVisible] = useState(false);
   
-  // ✅ 1. ESTADO DO FILTRO DE STATUS AGORA É UM ARRAY
   const [filtroStatus, setFiltroStatus] = useState<Status[]>([]);
-  // Estado temporário para as seleções dentro do modal
   const [tempFiltroStatus, setTempFiltroStatus] = useState<Status[]>([]);
 
   const [dataInicioFiltro, setDataInicioFiltro] = useState<Date | null>(null);
@@ -52,9 +50,7 @@ export default function ListaAtendimentosScreen() {
     initializeAtendimentos();
   }, []);
 
-  // ✅ 2. LÓGICA DE FILTRAGEM ATUALIZADA
   const atendimentosFiltrados = atendimentos.filter(atendimento => {
-    // Se o array de filtros de status estiver vazio, passa todos. Senão, verifica se o status do atendimento está no array.
     const statusMatch = filtroStatus.length === 0 || filtroStatus.includes(atendimento.status);
     if (!statusMatch) return false;
 
@@ -69,7 +65,6 @@ export default function ListaAtendimentosScreen() {
     return true;
   });
 
-  // ✅ 3. NOVAS FUNÇÕES PARA O MODAL DE FILTRO
   const handleToggleStatus = (status: Status) => {
     setTempFiltroStatus(prev => 
       prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
@@ -89,13 +84,179 @@ export default function ListaAtendimentosScreen() {
     setModalVisible(false);
   };
 
-  // Funções de exportação e data (inalteradas)
-  const showDateFilterPicker = (tipo: 'inicio' | 'fim') => { /* ... sua função de data ... */ };
-  const getFormattedDate = () => { /* ... sua função de formatar data ... */ };
-  const generateHtmlForPdf = (data: Atendimento[]) => { /* ... sua função de gerar PDF ... */ };
-  const handleExportPdf = async () => { /* ... sua função de exportar PDF ... */ };
-  const handleExportXlsx = async () => { /* ... sua função de exportar XLSX ... */ };
-  const handleImportXlsx = async () => { /* ... sua função de importar XLSX ... */ };
+  const handleClearAllData = () => {
+    Alert.alert(
+      "Atenção! Ação Irreversível",
+      "Você tem certeza que deseja excluir TODOS os atendimentos salvos? Esta ação não pode ser desfeita.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { 
+          text: "Sim, Excluir Tudo", 
+          onPress: async () => {
+            try {
+              await clearAllAtendimentos();
+              setModalVisible(false);
+              Alert.alert("Sucesso", "Todos os atendimentos foram excluídos.");
+            } catch (error) {
+              Alert.alert("Erro", "Não foi possível excluir os dados.");
+            }
+          },
+          style: "destructive"
+        }
+      ]
+    );
+  };
+
+  const showDateFilterPicker = (tipo: 'inicio' | 'fim') => {
+    const dataAtual = tipo === 'inicio' ? dataInicioFiltro : dataFimFiltro;
+    DateTimePickerAndroid.open({
+        value: dataAtual || new Date(),
+        mode: 'date',
+        onChange: (event, selectedDate) => {
+            if (event.type === 'set' && selectedDate) {
+                if (tipo === 'inicio') { setDataInicioFiltro(selectedDate); } 
+                else { setDataFimFiltro(selectedDate); }
+            }
+        }
+    });
+  };
+  
+  const getFormattedDate = () => {
+    const today = new Date();
+    const day = String(today.getDate()).padStart(2, '0');
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const year = today.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
+
+  const generateHtmlForPdf = (data: Atendimento[]) => {
+    const atendimentosHtml = data.map(at => `
+      <tr>
+        <td>${at.numeroChamado}</td><td>${at.numeroLogicoTerminal}</td><td>${at.status}</td>
+        <td>${at.solicitacao || ''}</td><td>${at.diagnosticoSolucao || ''}</td><td>${at.causaReal || ''}</td>
+        <td>${at.detalhePendencia || ''}</td><td>${new Date(at.dataInicio).toLocaleDateString('pt-BR')}</td>
+        <td>${at.dataFim ? new Date(at.dataFim).toLocaleDateString('pt-BR') : ''}</td>
+      </tr>`).join('');
+    return `
+      <html><head><style>body{font-family:Helvetica,sans-serif;color:#333}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;text-align:left;padding:4px;font-size:8px;}th{background-color:#f2f2f2}h1{text-align:center;color:#3e2c61ff}p{font-size:12px}</style></head>
+      <body><h1>Relatório de Atendimentos</h1><p><strong>Filtro Aplicado:</strong> ${filtroStatus.join(', ') || 'Todos'} | Período: ${(dataInicioFiltro && dataFimFiltro ? `${dataInicioFiltro.toLocaleDateString('pt-BR')} a ${dataFimFiltro.toLocaleDateString('pt-BR')}`: 'Todos')}</p><p><strong>Total de Registros:</strong> ${data.length}</p>
+      <table><thead><tr><th>Chamado</th><th>Terminal</th><th>Status</th><th>Motivo</th><th>Solução</th><th>Causa</th><th>Pendência</th><th>Data Início</th><th>Data Fim</th></tr></thead><tbody>${atendimentosHtml}</tbody></table></body></html>`;
+  };
+
+  const handleExportPdf = async () => {
+    const data = atendimentosFiltrados;
+    if (data.length === 0) { Alert.alert("Sem Dados", "Não há atendimentos para exportar em PDF."); return; }
+    try {
+      const { uri: tempUri } = await Print.printToFileAsync({ html: generateHtmlForPdf(data) });
+      const pdfName = `Relatorio_Atendimentos_${getFormattedDate()}.pdf`;
+      const newUri = FileSystem.documentDirectory + pdfName;
+      await FileSystem.moveAsync({ from: tempUri, to: newUri });
+      await Sharing.shareAsync(newUri, { mimeType: 'application/pdf', dialogTitle: 'Exportar Relatório PDF' });
+    } catch (error) { Alert.alert("Erro", "Não foi possível gerar o arquivo PDF."); }
+  };
+
+  const handleExportXlsx = async () => {
+    const data = atendimentosFiltrados;
+    if (data.length === 0) { Alert.alert("Sem Dados", "Não há atendimentos para exportar."); return; }
+    const header = ["Chamado", "Terminal", "Status", "Motivo", "Solução", "Causa Real", "Detalhe Pendência", "Data Início", "Data Fim"];
+    const rows = data.map(at => [ at.numeroChamado, at.numeroLogicoTerminal, at.status, at.solicitacao, at.diagnosticoSolucao, at.causaReal, at.detalhePendencia || '', new Date(at.dataInicio), at.dataFim ? new Date(at.dataFim) : null ]);
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Atendimentos");
+    const base64 = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+    const filename = FileSystem.documentDirectory + `Relatorio_Atendimentos_${getFormattedDate()}.xlsx`;
+    try {
+      await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
+      await Sharing.shareAsync(filename, { mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', dialogTitle: 'Exportar Relatório Excel' });
+    } catch (error) { Alert.alert("Erro", "Não foi possível gerar o arquivo Excel."); }
+  };
+
+  // ✅ FUNÇÃO DE IMPORTAÇÃO CORRIGIDA
+  const handleImportXlsx = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const asset = result.assets[0];
+      if (!asset.name.toLowerCase().endsWith('.xlsx')) {
+        Alert.alert("Arquivo Inválido", "Por favor, selecione um arquivo Excel (.xlsx).");
+        return;
+      }
+
+      const fileUri = asset.uri;
+      const fileContent = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
+      
+      const wb = XLSX.read(fileContent, { type: 'base64' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+      
+      // Usamos raw: false para que a biblioteca tente formatar as datas
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+
+      if (data.length < 2) {
+        Alert.alert("Erro", "Arquivo Excel vazio ou com formato inválido.");
+        return;
+      }
+
+      const rows = data.slice(1);
+      let importadosComSucesso = 0;
+
+      // Função para tentar analisar a data do formato brasileiro
+      const parseDate = (dateValue: any): Date | null => {
+        if (!dateValue) return null;
+        // Se já for um objeto Date (de um backup novo), retorna ele
+        if (dateValue instanceof Date) {
+            return dateValue;
+        }
+        // Se for uma string, tenta analisar o formato pt-BR
+        if (typeof dateValue === 'string') {
+            const parts = dateValue.split(/[\s,/: ]+/);
+            if (parts.length < 3) return null;
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1; // Mês é 0-indexado
+            const year = parseInt(parts[2], 10);
+            const hours = parseInt(parts[3], 10) || 0;
+            const minutes = parseInt(parts[4], 10) || 0;
+            const seconds = parseInt(parts[5], 10) || 0;
+            if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+            return new Date(year, month, day, hours, minutes, seconds);
+        }
+        return null;
+      }
+
+      for (const row of rows as any[]) {
+        if (!row[0] || !row[1]) continue;
+
+        const dataInicio = parseDate(row[6]) || new Date();
+        const dataFim = parseDate(row[7]);
+
+        const novoAtendimento: Atendimento = {
+          id: Date.now().toString() + Math.random(),
+          numeroChamado: String(row[0]),
+          numeroLogicoTerminal: String(row[1]),
+          status: (statusOptions.includes(row[2]) ? row[2] : 'Em andamento') as Status,
+          solicitacao: String(row[3] || ''),
+          detalhePendencia: String(row[4] || ''),
+          causaReal: String(row[5] || ''),
+          dataInicio: dataInicio.toISOString(),
+          dataFim: dataFim ? dataFim.toISOString() : null,
+          diagnosticoSolucao: '',
+        };
+        await addAtendimento(novoAtendimento);
+        importadosComSucesso++;
+      }
+
+      Alert.alert("Sucesso!", `${importadosComSucesso} atendimentos foram importados com sucesso.`);
+
+    } catch (error) {
+      console.error("Erro ao importar XLSX:", error);
+      Alert.alert("Erro", "Não foi possível importar o arquivo. Verifique se ele não está corrompido.");
+    }
+  };
 
   const isFiltroAtivo = filtroStatus.length > 0 || (!!dataInicioFiltro && !!dataFimFiltro);
 
@@ -105,7 +266,6 @@ export default function ListaAtendimentosScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ✅ 4. MODAL ATUALIZADO COM CHECKBOXES E BOTÕES */}
       <Modal visible={modalVisible} onRequestClose={() => setModalVisible(false)} transparent={true} animationType="slide">
         <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
           <View style={styles.modalView}>
@@ -124,8 +284,12 @@ export default function ListaAtendimentosScreen() {
             </View>
             
             <View style={styles.modalButtonContainer}>
-              <Button title="Limpar Filtros" onPress={limparFiltros} color="#DC3545" />
+              <Button title="Limpar Filtros" onPress={limparFiltros} color="#555" />
               <Button title="Aplicar Filtros" onPress={aplicarFiltros} />
+            </View>
+
+            <View style={{ marginTop: 30, width: '100%', borderTopWidth: 1, borderTopColor: '#ccc', paddingTop: 20 }}>
+              <Button title="Excluir Todos os Dados" onPress={handleClearAllData} color="#c91c1c" />
             </View>
           </View>
         </Pressable>
@@ -137,7 +301,7 @@ export default function ListaAtendimentosScreen() {
           headerRight: () => {
             const iconColor = colorScheme === 'dark' ? 'white' : 'black';
             return (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 22 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 22, marginRight: 15 }}>
                 <Pressable onPress={handleImportXlsx}><FontAwesome name="cloud-upload" size={26} color={iconColor} /></Pressable>
                 <Pressable onPress={() => { setTempFiltroStatus(filtroStatus); setModalVisible(true); }}><FontAwesome name="filter" size={24} color={isFiltroAtivo ? '#007AFF' : iconColor} /></Pressable>
                 <Pressable onPress={handleExportPdf}><FontAwesome name="file-pdf-o" size={24} color="#DC3545" /></Pressable>
@@ -160,7 +324,7 @@ export default function ListaAtendimentosScreen() {
   );
 }
 
-// ✅ 5. ESTILOS ATUALIZADOS PARA O MODAL
+// (Seus estilos personalizados mantidos)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#3e2961ff' },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
