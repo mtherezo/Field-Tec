@@ -88,7 +88,7 @@ export default function BuscaScreen() {
     setAnalise(contagem);
   };
 
-  // ✅ NOVA FUNÇÃO PARA LIMPAR A BUSCA
+  // FUNÇÃO PARA LIMPAR A BUSCA
   const handleClear = () => {
     Keyboard.dismiss();
     setTerminalId('');

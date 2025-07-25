@@ -2,14 +2,14 @@
 
 import { create } from 'zustand';
 import { Atendimento } from '../types/atendimento';
+// ✅ 1. IMPORTAR AS FUNÇÕES CORRETAS E ATUALIZADAS
 import {
-  initDatabase,
-  migrateAsyncStorageToSQLite,
+  performStartupDbTasks, // A nova função de inicialização e migração
   getAtendimentosFromDB,
   addAtendimentoToDB,
   updateAtendimentoInDB,
   deleteAtendimentoFromDB,
-  deleteAllAtendimentosFromDB, // ✅ 1. IMPORTAR A NOVA FUNÇÃO
+  deleteAllAtendimentosFromDB,
 } from '../services/databaseService';
 
 interface AtendimentoState {
@@ -19,21 +19,26 @@ interface AtendimentoState {
   addAtendimento: (novoAtendimento: Atendimento) => Promise<void>;
   updateAtendimento: (atendimentoAtualizado: Atendimento) => Promise<void>;
   removeAtendimento: (atendimentoId: string) => Promise<void>;
-  // ✅ 2. ADICIONAR A NOVA AÇÃO À INTERFACE
-  clearAllAtendimentos: () => Promise<void>; 
+  clearAllAtendimentos: () => Promise<void>;
 }
 
 export const useAtendimentoStore = create<AtendimentoState>((set, get) => ({
   atendimentos: [],
   isLoading: true,
 
+  // ✅ 2. FUNÇÃO DE INICIALIZAÇÃO CORRIGIDA
   initializeAtendimentos: async () => {
     try {
       if (!get().isLoading) set({ isLoading: true });
-      await initDatabase();
-      await migrateAsyncStorageToSQLite();
+      
+      // Chama a função única que prepara o DB e migra os dados
+      await performStartupDbTasks();
+      
+      // AGORA, com a tabela pronta, busca os dados
       const dadosDoDB = await getAtendimentosFromDB();
+      
       dadosDoDB.sort((a, b) => new Date(b.dataInicio).getTime() - new Date(a.dataInicio).getTime());
+      
       set({ atendimentos: dadosDoDB, isLoading: false });
     } catch (error) {
       console.error("Falha ao inicializar a store:", error);
@@ -43,6 +48,7 @@ export const useAtendimentoStore = create<AtendimentoState>((set, get) => ({
 
   addAtendimento: async (novoAtendimento) => {
     await addAtendimentoToDB(novoAtendimento);
+    // Recarrega tudo do DB para garantir que a lista esteja sempre atualizada
     await get().initializeAtendimentos();
   },
 
@@ -56,10 +62,8 @@ export const useAtendimentoStore = create<AtendimentoState>((set, get) => ({
     await get().initializeAtendimentos();
   },
 
-  // ✅ 3. IMPLEMENTAR A NOVA AÇÃO
   clearAllAtendimentos: async () => {
     await deleteAllAtendimentosFromDB();
-    // Limpa o estado na memória para refletir a mudança instantaneamente
     set({ atendimentos: [] });
   },
 }));

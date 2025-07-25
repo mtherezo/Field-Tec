@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, Pressable, Alert, Modal, useColorScheme, Button } from 'react-native';
-import { useFocusEffect, Stack, useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -10,7 +10,7 @@ import * as Print from 'expo-print';
 import * as XLSX from 'xlsx';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
-
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAtendimentoStore } from '@/src/store/atendimentoStore';
 import { Atendimento, Status, statusOptions } from '@/src/types/atendimento';
 
@@ -171,7 +171,6 @@ export default function ListaAtendimentosScreen() {
     } catch (error) { Alert.alert("Erro", "Não foi possível gerar o arquivo Excel."); }
   };
 
-  // ✅ FUNÇÃO DE IMPORTAÇÃO CORRIGIDA
   const handleImportXlsx = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -194,8 +193,7 @@ export default function ListaAtendimentosScreen() {
       const wsname = wb.SheetNames[0];
       const ws = wb.Sheets[wsname];
       
-      // Usamos raw: false para que a biblioteca tente formatar as datas
-      const data = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1, cellDates: true } as any);
 
       if (data.length < 2) {
         Alert.alert("Erro", "Arquivo Excel vazio ou com formato inválido.");
@@ -205,35 +203,8 @@ export default function ListaAtendimentosScreen() {
       const rows = data.slice(1);
       let importadosComSucesso = 0;
 
-      // Função para tentar analisar a data do formato brasileiro
-      const parseDate = (dateValue: any): Date | null => {
-        if (!dateValue) return null;
-        // Se já for um objeto Date (de um backup novo), retorna ele
-        if (dateValue instanceof Date) {
-            return dateValue;
-        }
-        // Se for uma string, tenta analisar o formato pt-BR
-        if (typeof dateValue === 'string') {
-            const parts = dateValue.split(/[\s,/: ]+/);
-            if (parts.length < 3) return null;
-            const day = parseInt(parts[0], 10);
-            const month = parseInt(parts[1], 10) - 1; // Mês é 0-indexado
-            const year = parseInt(parts[2], 10);
-            const hours = parseInt(parts[3], 10) || 0;
-            const minutes = parseInt(parts[4], 10) || 0;
-            const seconds = parseInt(parts[5], 10) || 0;
-            if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
-            return new Date(year, month, day, hours, minutes, seconds);
-        }
-        return null;
-      }
-
       for (const row of rows as any[]) {
         if (!row[0] || !row[1]) continue;
-
-        const dataInicio = parseDate(row[6]) || new Date();
-        const dataFim = parseDate(row[7]);
-
         const novoAtendimento: Atendimento = {
           id: Date.now().toString() + Math.random(),
           numeroChamado: String(row[0]),
@@ -242,8 +213,8 @@ export default function ListaAtendimentosScreen() {
           solicitacao: String(row[3] || ''),
           detalhePendencia: String(row[4] || ''),
           causaReal: String(row[5] || ''),
-          dataInicio: dataInicio.toISOString(),
-          dataFim: dataFim ? dataFim.toISOString() : null,
+          dataInicio: (row[6] instanceof Date ? row[6] : new Date()).toISOString(),
+          dataFim: (row[7] instanceof Date ? row[7] : null)?.toISOString() || null,
           diagnosticoSolucao: '',
         };
         await addAtendimento(novoAtendimento);
@@ -265,7 +236,8 @@ export default function ListaAtendimentosScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    // ✅ 2. A TELA AGORA É ENVOLVIDA PELA SafeAreaView
+    <SafeAreaView style={styles.container}>
       <Modal visible={modalVisible} onRequestClose={() => setModalVisible(false)} transparent={true} animationType="slide">
         <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
           <View style={styles.modalView}>
@@ -320,13 +292,16 @@ export default function ListaAtendimentosScreen() {
         contentContainerStyle={{ padding: 8 }}
         ListEmptyComponent={() => (<View style={styles.emptyContainer}><Text style={styles.emptyText}>{isFiltroAtivo ? 'Nenhum atendimento encontrado' : 'Nenhum atendimento cadastrado.'}</Text>{!isFiltroAtivo && <Text style={styles.emptySubtext}>Clique no '+' para começar.</Text>}</View>)}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
-// (Seus estilos personalizados mantidos)
+// ✅ 3. ESTILO DO CONTAINER ATUALIZADO
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#3e2961ff' },
+  container: { 
+    flex: 1,
+    backgroundColor: '#3e2961ff' 
+  },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   itemContainer: { backgroundColor: '#c7d8c4ff', borderRadius: 12, padding: 16, marginVertical: 8, marginHorizontal: 12, borderWidth: 1, borderColor: '#EFEFEF', shadowColor: "#555", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 3.84, elevation: 5 },
   itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
