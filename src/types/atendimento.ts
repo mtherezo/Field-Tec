@@ -29,4 +29,6 @@ export type Atendimento = {
   causaReal: string;
   status: Status;
   detalhePendencia?: string;
+  /** URIs locais das fotos anexadas ao atendimento. */
+  fotos?: string[];
 };

@@ -1,6 +1,6 @@
 // app/(tabs)/busca.tsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,50 +9,12 @@ import {
   StyleSheet,
   FlatList,
   Keyboard,
-  Pressable,
 } from 'react-native';
 import { Atendimento } from '@/src/types/atendimento';
 import { useAtendimentoStore } from '@/src/store/atendimentoStore';
 import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-const AtendimentoItem = ({ item }: { item: Atendimento }) => {
-    const router = useRouter();
-    const handleNavigate = () => {
-        router.push({
-            pathname: "/atendimento/[id]",
-            params: { id: item.id },
-        });
-    };
-    return (
-        <Pressable style={styles.itemContainer} onPress={handleNavigate}>
-            <View style={styles.itemHeader}>
-                <Text style={styles.itemTitle}>{item.numeroChamado}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-                    <Text style={styles.statusText}>{item.status}</Text>
-                </View>
-            </View>
-            {item.status.includes('Pendente') && item.detalhePendencia && (
-                <View style={styles.pendenciaRow}>
-                    <FontAwesome name="info-circle" size={14} color="#B45309" />
-                    <Text style={styles.pendenciaText}>{item.detalhePendencia}</Text>
-                </View>
-            )}
-            <Text style={styles.itemSubtitle}>Causa Real: {item.causaReal || 'Não informada'}</Text>
-            <Text style={styles.itemText}>Solução: {item.diagnosticoSolucao || 'Não informada'}</Text>
-            <Text style={styles.itemDate}>
-                Data: {new Date(item.dataInicio).toLocaleDateString('pt-BR')}
-            </Text>
-        </Pressable>
-    );
-};
-
-const getStatusColor = (status: string) => {
-    if (status === 'Concluído') return '#28a745';
-    if (status.includes('Pendente')) return '#ffc107';
-    return 'orange';
-};
+import { AtendimentoCard } from '@/components/AtendimentoCard';
 
 type AnaliseProblemas = {
   [problema: string]: number;
@@ -73,9 +35,10 @@ export default function BuscaScreen() {
     setPesquisaFeita(true);
 
     const termoBusca = (idParaBuscar || terminalId).trim();
-    
+
+    // Compara os dois lados sem espaços para evitar falha por espaços acidentais.
     const filtrados = atendimentos.filter(
-      (at) => at.numeroLogicoTerminal === termoBusca
+      (at) => at.numeroLogicoTerminal.trim() === termoBusca
     );
     filtrados.sort((a, b) => new Date(b.dataInicio).getTime() - new Date(a.dataInicio).getTime());
     setResultados(filtrados);
@@ -88,7 +51,7 @@ export default function BuscaScreen() {
     setAnalise(contagem);
   };
 
-  // FUNÇÃO PARA LIMPAR A BUSCA
+  // ✅ NOVA FUNÇÃO PARA LIMPAR A BUSCA
   const handleClear = () => {
     Keyboard.dismiss();
     setTerminalId('');
@@ -137,7 +100,7 @@ export default function BuscaScreen() {
         <FlatList
           data={resultados}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <AtendimentoItem item={item} />}
+          renderItem={({ item }) => <AtendimentoCard item={item} variant="busca" />}
           ListHeaderComponent={() => (
             <View style={styles.analiseContainer}>
               <Text style={styles.analiseTitle}>Problemas Recorrentes</Text>
@@ -165,17 +128,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyText: { textAlign: 'center', marginTop: 20, fontSize: 16, color: 'white', fontWeight: 'bold' },
-  analiseContainer: { padding: 16, backgroundColor: '#c7d8c4ff', marginHorizontal: 16, marginTop: 8, borderRadius: 8 },
+  analiseContainer: { padding: 16, backgroundColor: '#c7d8c4', marginHorizontal: 16, marginTop: 8, borderRadius: 8 },
   analiseTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
   analiseItem: { fontSize: 15, marginBottom: 4 },
-  itemContainer: { backgroundColor: '#c7d8c4ff', borderRadius: 12, padding: 16, marginVertical: 8, marginHorizontal: 16, borderWidth: 1, borderColor: '#EFEFEF', shadowColor: "#555", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 3.84, elevation: 5 },
-  itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-  itemTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', flex: 1, marginRight: 8 },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
-  statusText: { fontSize: 12, color: 'black', fontWeight: 'bold' },
-  itemSubtitle: { fontSize: 14, color: '#333', fontWeight: '600', marginTop: 8 },
-  itemText: { fontSize: 14, color: '#26271eff', marginTop: 4 },
-  itemDate: { fontSize: 12, color: '#26271eff', marginTop: 8, textAlign: 'right' },
-  pendenciaRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#dabe52ff', borderRadius: 6, padding: 8, marginTop: 8 },
-  pendenciaText: { marginLeft: 8, fontSize: 14, color: '#803a04ff', fontStyle: 'italic', flex: 1 },
 });

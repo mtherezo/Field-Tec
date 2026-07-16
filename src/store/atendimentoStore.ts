@@ -2,15 +2,22 @@
 
 import { create } from 'zustand';
 import { Atendimento } from '../types/atendimento';
-// ✅ 1. IMPORTAR AS FUNÇÕES CORRETAS E ATUALIZADAS
 import {
-  performStartupDbTasks, // A nova função de inicialização e migração
+  initDatabase,
+  migrateAsyncStorageToSQLite,
   getAtendimentosFromDB,
   addAtendimentoToDB,
   updateAtendimentoInDB,
   deleteAtendimentoFromDB,
   deleteAllAtendimentosFromDB,
+  bulkUpsertAtendimentosToDB,
 } from '../services/databaseService';
+
+// Ordena do mais recente para o mais antigo (mesma regra do SELECT do banco).
+const ordenar = (lista: Atendimento[]): Atendimento[] =>
+  [...lista].sort(
+    (a, b) => new Date(b.dataInicio).getTime() - new Date(a.dataInicio).getTime()
+  );
 
 interface AtendimentoState {
   atendimentos: Atendimento[];
@@ -20,50 +27,59 @@ interface AtendimentoState {
   updateAtendimento: (atendimentoAtualizado: Atendimento) => Promise<void>;
   removeAtendimento: (atendimentoId: string) => Promise<void>;
   clearAllAtendimentos: () => Promise<void>;
+  importAtendimentos: (lista: Atendimento[]) => Promise<void>;
 }
 
 export const useAtendimentoStore = create<AtendimentoState>((set, get) => ({
   atendimentos: [],
   isLoading: true,
 
-  // ✅ 2. FUNÇÃO DE INICIALIZAÇÃO CORRIGIDA
+  // Roda uma vez na abertura do app: prepara o DB, migra dados antigos e carrega tudo.
   initializeAtendimentos: async () => {
     try {
       if (!get().isLoading) set({ isLoading: true });
-      
-      // Chama a função única que prepara o DB e migra os dados
-      await performStartupDbTasks();
-      
-      // AGORA, com a tabela pronta, busca os dados
-      const dadosDoDB = await getAtendimentosFromDB();
-      
-      dadosDoDB.sort((a, b) => new Date(b.dataInicio).getTime() - new Date(a.dataInicio).getTime());
-      
-      set({ atendimentos: dadosDoDB, isLoading: false });
+
+      await initDatabase();
+      await migrateAsyncStorageToSQLite();
+      const dados = await getAtendimentosFromDB(); // já vem ordenado do banco
+
+      set({ atendimentos: dados, isLoading: false });
     } catch (error) {
-      console.error("Falha ao inicializar a store:", error);
+      console.error('Falha ao inicializar a store:', error);
       set({ isLoading: false });
     }
   },
 
-  addAtendimento: async (novoAtendimento) => {
-    await addAtendimentoToDB(novoAtendimento);
-    // Recarrega tudo do DB para garantir que a lista esteja sempre atualizada
-    await get().initializeAtendimentos();
+  // As mutações abaixo atualizam o estado em memória em vez de recarregar o
+  // banco inteiro — muito mais rápido e sem re-executar init/migração.
+  addAtendimento: async (novo) => {
+    await addAtendimentoToDB(novo);
+    set(state => ({ atendimentos: ordenar([novo, ...state.atendimentos]) }));
   },
 
-  updateAtendimento: async (atendimentoAtualizado) => {
-    await updateAtendimentoInDB(atendimentoAtualizado);
-    await get().initializeAtendimentos();
+  updateAtendimento: async (atualizado) => {
+    await updateAtendimentoInDB(atualizado);
+    set(state => ({
+      atendimentos: ordenar(
+        state.atendimentos.map(at => (at.id === atualizado.id ? atualizado : at))
+      ),
+    }));
   },
 
-  removeAtendimento: async (atendimentoId) => {
-    await deleteAtendimentoFromDB(atendimentoId);
-    await get().initializeAtendimentos();
+  removeAtendimento: async (id) => {
+    await deleteAtendimentoFromDB(id);
+    set(state => ({ atendimentos: state.atendimentos.filter(at => at.id !== id) }));
   },
 
   clearAllAtendimentos: async () => {
     await deleteAllAtendimentosFromDB();
     set({ atendimentos: [] });
+  },
+
+  // Importação/restauração em lote (backup JSON ou planilha).
+  importAtendimentos: async (lista) => {
+    await bulkUpsertAtendimentosToDB(lista);
+    const dados = await getAtendimentosFromDB();
+    set({ atendimentos: dados });
   },
 }));

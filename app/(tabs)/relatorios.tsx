@@ -9,8 +9,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as XLSX from 'xlsx';
+import { getFormattedDate } from '@/src/utils/format';
 
 interface TerminalRanking {
   terminalId: string;
@@ -81,14 +82,6 @@ export default function RelatoriosScreen() {
 
   // Formata o nome do mês e ano para exibição
   const nomeMesDisplay = displayDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
-
-  const getFormattedDate = () => {
-    const today = new Date();
-    const day = String(today.getDate()).padStart(2, '0');
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const year = today.getFullYear();
-    return `${day}-${month}-${year}`;
-  };
 
   // Funções de exportação (agora usam 'nomeMesDisplay' para o nome do arquivo)
   const generateHtmlForRankingPdf = (data: TerminalRanking[]) => {

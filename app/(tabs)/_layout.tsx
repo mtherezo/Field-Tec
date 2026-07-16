@@ -3,11 +3,12 @@
 import React from 'react';
 import { FontAwesome } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import { ColorValue } from 'react-native';
 
 // A função auxiliar para o ícone
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
-  color: string;
+  color: ColorValue;
 }) {
   return <FontAwesome size={26} style={{ marginBottom: -3 }} {...props} />;
 }

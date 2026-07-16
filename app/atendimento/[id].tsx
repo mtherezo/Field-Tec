@@ -1,13 +1,13 @@
 // app/atendimento/[id].tsx
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, Pressable, Image, Modal } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
-// ✅ 1. IMPORTAR A NOSSA STORE
 import { useAtendimentoStore } from '@/src/store/atendimentoStore';
-import { Atendimento } from '@/src/types/atendimento';
 import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getStatusStyle } from '@/constants/theme';
+import { deletePhotoFile } from '@/src/services/photoService';
 
 // (Componentes InfoCard e InfoRow continuam os mesmos)
 const InfoCard = ({ title, children }: { title: string, children: React.ReactNode }) => (
@@ -29,12 +29,14 @@ const InfoRow = ({ label, value, icon }: { label: string; value: string; icon?: 
 export default function DetalhesAtendimentoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  
-  // ✅ 2. PEGAR OS DADOS E AÇÕES DIRETAMENTE DA STORE
+
   const { atendimentos, removeAtendimento, isLoading } = useAtendimentoStore();
-  
+
   // O estado local 'atendimento' agora é derivado da store
   const atendimento = atendimentos.find(at => at.id === id);
+
+  // Foto aberta no visualizador em tela cheia (null = fechado).
+  const [fotoAberta, setFotoAberta] = useState<string | null>(null);
 
   // ✅ 3. FUNÇÃO DE DELETAR ATUALIZADA
   const handleDelete = () => {
@@ -46,12 +48,15 @@ export default function DetalhesAtendimentoScreen() {
         { 
           text: "Sim, Excluir", 
           onPress: async () => {
-            // Chama a ação da store, que cuida de tudo
-            await removeAtendimento(atendimento.id);
-            Alert.alert("Sucesso", "Atendimento excluído.");
-            // Volta para a tela principal
-            router.replace('/(tabs)');
-          }, 
+            try {
+              // Remove os arquivos de foto antes de apagar o registro
+              await Promise.all((atendimento.fotos ?? []).map(deletePhotoFile));
+              await removeAtendimento(atendimento.id);
+              router.replace('/(tabs)');
+            } catch {
+              Alert.alert('Erro', 'Não foi possível excluir o atendimento.');
+            }
+          },
           style: "destructive"
         }
       ]
@@ -66,16 +71,25 @@ export default function DetalhesAtendimentoScreen() {
   if (!atendimento) {
     return <View style={styles.centered}><Text>Atendimento não encontrado.</Text></View>;
   }
-  
-  const statusColor = atendimento.status === 'Concluído' ? '#28a745' : atendimento.status.includes('Pendente') ? '#ffc107' : 'orange';
+
+  const statusStyle = getStatusStyle(atendimento.status);
+  const fotos = atendimento.fotos ?? [];
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <Stack.Screen options={{ title: `Chamado ${atendimento.numeroChamado}` }} />
+
+      <Modal visible={!!fotoAberta} transparent animationType="fade" onRequestClose={() => setFotoAberta(null)}>
+        <Pressable style={styles.viewerOverlay} onPress={() => setFotoAberta(null)}>
+          {fotoAberta && <Image source={{ uri: fotoAberta }} style={styles.viewerImage} resizeMode="contain" />}
+          <View style={styles.viewerCloseHint}><FontAwesome name="times-circle" size={28} color="#fff" /></View>
+        </Pressable>
+      </Modal>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <InfoCard title='Status do Chamado'>
-           <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-              <Text style={styles.statusText}>{atendimento.status}</Text>
+           <View style={[styles.statusBadge, { backgroundColor: statusStyle.backgroundColor }]}>
+              <Text style={[styles.statusText, { color: statusStyle.color }]}>{atendimento.status}</Text>
            </View>
         </InfoCard>
         
@@ -104,6 +118,18 @@ export default function DetalhesAtendimentoScreen() {
         <InfoCard title='Causa Real Encontrada'>
           <Text style={styles.blockText}>{atendimento.causaReal || 'Não informado'}</Text>
         </InfoCard>
+
+        {fotos.length > 0 && (
+          <InfoCard title={`Fotos (${fotos.length})`}>
+            <View style={styles.fotoGrid}>
+              {fotos.map(uri => (
+                <Pressable key={uri} onPress={() => setFotoAberta(uri)}>
+                  <Image source={{ uri }} style={styles.fotoThumb} />
+                </Pressable>
+              ))}
+            </View>
+          </InfoCard>
+        )}
 
         <View style={styles.actionsContainer}>
           <Pressable style={[styles.button, styles.editButton]} onPress={() => { router.push({ pathname: '/novoAtendimento', params: { atendimentoId: atendimento.id } })}}>
@@ -236,4 +262,9 @@ const styles = StyleSheet.create({
     borderLeftColor: '#FBBF24',
     gap: 10,
   },
+  fotoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  fotoThumb: { width: 90, height: 90, borderRadius: 8, borderWidth: 1, borderColor: '#ddd' },
+  viewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
+  viewerImage: { width: '100%', height: '80%' },
+  viewerCloseHint: { position: 'absolute', top: 40, right: 20 },
 });
