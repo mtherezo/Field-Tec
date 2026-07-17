@@ -10,7 +10,7 @@ const dbPromise = SQLite.openDatabaseAsync('atendimentos.db');
 const MIGRATION_KEY = '@atm-assistente:migration_completed_v2';
 
 // Versão atual do schema. Incrementar ao adicionar colunas novas.
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 // Linha "crua" como vem do SQLite (fotos é TEXT/JSON).
 type AtendimentoRow = Omit<Atendimento, 'fotos'> & { fotos: string | null };
@@ -52,7 +52,9 @@ export const initDatabase = async (): Promise<void> => {
         causaReal TEXT,
         status TEXT,
         detalhePendencia TEXT,
-        fotos TEXT
+        fotos TEXT,
+        latitude REAL,
+        longitude REAL
       );
       CREATE INDEX IF NOT EXISTS idx_atendimentos_terminal ON atendimentos (numeroLogicoTerminal);
       CREATE INDEX IF NOT EXISTS idx_atendimentos_dataInicio ON atendimentos (dataInicio);
@@ -74,11 +76,23 @@ const runSchemaMigrations = async (db: SQLite.SQLiteDatabase): Promise<void> => 
   const result = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const currentVersion = result?.user_version ?? 0;
 
+  const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(atendimentos)');
+  const temColuna = (nome: string) => columns.some(c => c.name === nome);
+
   if (currentVersion < 1) {
-    // v1: garante a coluna 'fotos' em bancos antigos (a tabela pode já existir sem ela).
-    const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(atendimentos)');
-    if (!columns.some(c => c.name === 'fotos')) {
+    // v1: garante a coluna 'fotos' em bancos antigos.
+    if (!temColuna('fotos')) {
       await db.execAsync('ALTER TABLE atendimentos ADD COLUMN fotos TEXT;');
+    }
+  }
+
+  if (currentVersion < 2) {
+    // v2: coordenadas de GPS.
+    if (!temColuna('latitude')) {
+      await db.execAsync('ALTER TABLE atendimentos ADD COLUMN latitude REAL;');
+    }
+    if (!temColuna('longitude')) {
+      await db.execAsync('ALTER TABLE atendimentos ADD COLUMN longitude REAL;');
     }
   }
 
@@ -105,8 +119,8 @@ export const migrateAsyncStorageToSQLite = async (): Promise<void> => {
     await db.withTransactionAsync(async () => {
       for (const at of oldData) {
         await db.runAsync(
-          `INSERT OR REPLACE INTO atendimentos (id, numeroChamado, numeroLogicoTerminal, solicitacao, dataInicio, diagnosticoSolucao, dataFim, causaReal, status, detalhePendencia, fotos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-          [at.id, at.numeroChamado, at.numeroLogicoTerminal, at.solicitacao, at.dataInicio, at.diagnosticoSolucao, at.dataFim, at.causaReal, at.status, at.detalhePendencia || null, serializeFotos(at.fotos)]
+          `INSERT OR REPLACE INTO atendimentos (id, numeroChamado, numeroLogicoTerminal, solicitacao, dataInicio, diagnosticoSolucao, dataFim, causaReal, status, detalhePendencia, fotos, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          [at.id, at.numeroChamado, at.numeroLogicoTerminal, at.solicitacao, at.dataInicio, at.diagnosticoSolucao, at.dataFim, at.causaReal, at.status, at.detalhePendencia || null, serializeFotos(at.fotos), at.latitude ?? null, at.longitude ?? null]
         );
       }
     });
@@ -139,8 +153,8 @@ export const addAtendimentoToDB = async (at: Atendimento): Promise<void> => {
   try {
     const db = await dbPromise;
     await db.runAsync(
-      `INSERT INTO atendimentos (id, numeroChamado, numeroLogicoTerminal, solicitacao, dataInicio, diagnosticoSolucao, dataFim, causaReal, status, detalhePendencia, fotos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-      [at.id, at.numeroChamado, at.numeroLogicoTerminal, at.solicitacao, at.dataInicio, at.diagnosticoSolucao, at.dataFim, at.causaReal, at.status, at.detalhePendencia || null, serializeFotos(at.fotos)]
+      `INSERT INTO atendimentos (id, numeroChamado, numeroLogicoTerminal, solicitacao, dataInicio, diagnosticoSolucao, dataFim, causaReal, status, detalhePendencia, fotos, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+      [at.id, at.numeroChamado, at.numeroLogicoTerminal, at.solicitacao, at.dataInicio, at.diagnosticoSolucao, at.dataFim, at.causaReal, at.status, at.detalhePendencia || null, serializeFotos(at.fotos), at.latitude ?? null, at.longitude ?? null]
     );
   } catch (error) {
     console.error('Erro ao adicionar atendimento ao DB', error);
@@ -159,8 +173,8 @@ export const bulkUpsertAtendimentosToDB = async (lista: Atendimento[]): Promise<
     await db.withTransactionAsync(async () => {
       for (const at of lista) {
         await db.runAsync(
-          `INSERT OR REPLACE INTO atendimentos (id, numeroChamado, numeroLogicoTerminal, solicitacao, dataInicio, diagnosticoSolucao, dataFim, causaReal, status, detalhePendencia, fotos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-          [at.id, at.numeroChamado, at.numeroLogicoTerminal, at.solicitacao, at.dataInicio, at.diagnosticoSolucao, at.dataFim, at.causaReal, at.status, at.detalhePendencia || null, serializeFotos(at.fotos)]
+          `INSERT OR REPLACE INTO atendimentos (id, numeroChamado, numeroLogicoTerminal, solicitacao, dataInicio, diagnosticoSolucao, dataFim, causaReal, status, detalhePendencia, fotos, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          [at.id, at.numeroChamado, at.numeroLogicoTerminal, at.solicitacao, at.dataInicio, at.diagnosticoSolucao, at.dataFim, at.causaReal, at.status, at.detalhePendencia || null, serializeFotos(at.fotos), at.latitude ?? null, at.longitude ?? null]
         );
       }
     });
@@ -174,8 +188,8 @@ export const updateAtendimentoInDB = async (at: Atendimento): Promise<void> => {
   try {
     const db = await dbPromise;
     await db.runAsync(
-      `UPDATE atendimentos SET numeroChamado = ?, numeroLogicoTerminal = ?, solicitacao = ?, dataInicio = ?, diagnosticoSolucao = ?, dataFim = ?, causaReal = ?, status = ?, detalhePendencia = ?, fotos = ? WHERE id = ?;`,
-      [at.numeroChamado, at.numeroLogicoTerminal, at.solicitacao, at.dataInicio, at.diagnosticoSolucao, at.dataFim, at.causaReal, at.status, at.detalhePendencia || null, serializeFotos(at.fotos), at.id]
+      `UPDATE atendimentos SET numeroChamado = ?, numeroLogicoTerminal = ?, solicitacao = ?, dataInicio = ?, diagnosticoSolucao = ?, dataFim = ?, causaReal = ?, status = ?, detalhePendencia = ?, fotos = ?, latitude = ?, longitude = ? WHERE id = ?;`,
+      [at.numeroChamado, at.numeroLogicoTerminal, at.solicitacao, at.dataInicio, at.diagnosticoSolucao, at.dataFim, at.causaReal, at.status, at.detalhePendencia || null, serializeFotos(at.fotos), at.latitude ?? null, at.longitude ?? null, at.id]
     );
   } catch (error) {
     console.error('Erro ao atualizar atendimento no DB', error);

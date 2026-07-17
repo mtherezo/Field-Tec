@@ -60,6 +60,8 @@ const normalizarAtendimento = (raw: any): Atendimento | null => {
     dataInicio: raw.dataInicio ? String(raw.dataInicio) : new Date().toISOString(),
     dataFim: raw.dataFim ? String(raw.dataFim) : null,
     fotos: Array.isArray(raw.fotos) ? raw.fotos.map(String) : [],
+    latitude: typeof raw.latitude === 'number' ? raw.latitude : null,
+    longitude: typeof raw.longitude === 'number' ? raw.longitude : null,
   };
 };
 

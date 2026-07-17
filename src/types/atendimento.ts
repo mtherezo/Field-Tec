@@ -31,4 +31,7 @@ export type Atendimento = {
   detalhePendencia?: string;
   /** URIs locais das fotos anexadas ao atendimento. */
   fotos?: string[];
+  /** Coordenadas capturadas no local do atendimento (opcional). */
+  latitude?: number | null;
+  longitude?: number | null;
 };

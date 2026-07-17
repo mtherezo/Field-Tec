@@ -12,6 +12,7 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as XLSX from 'xlsx';
 import { getFormattedDate } from '@/src/utils/format';
+import { getStatusStyle } from '@/constants/theme';
 
 interface TerminalRanking {
   terminalId: string;
@@ -70,6 +71,46 @@ export default function RelatoriosScreen() {
 
     return ranking;
   }, [atendimentos, displayDate]); // Roda de novo quando os atendimentos ou a data mudam
+
+  // Métricas do mês: total, concluídos, pendentes, tempo médio de resolução e contagem por status.
+  const metricas = useMemo(() => {
+    const mes = displayDate.getMonth();
+    const ano = displayDate.getFullYear();
+    const doMes = atendimentos.filter(at => {
+      const d = new Date(at.dataInicio);
+      return d.getMonth() === mes && d.getFullYear() === ano;
+    });
+
+    const porStatus: Record<string, number> = {};
+    let concluidos = 0;
+    let pendentes = 0;
+    let somaResolucaoMs = 0;
+    let comResolucao = 0;
+
+    for (const at of doMes) {
+      porStatus[at.status] = (porStatus[at.status] || 0) + 1;
+      if (at.status === 'Concluído') concluidos++;
+      if (at.status.includes('Pendente')) pendentes++;
+      if (at.status === 'Concluído' && at.dataFim) {
+        const ms = new Date(at.dataFim).getTime() - new Date(at.dataInicio).getTime();
+        if (ms > 0) { somaResolucaoMs += ms; comResolucao++; }
+      }
+    }
+
+    const statusOrdenado = Object.entries(porStatus).sort(([, a], [, b]) => b - a);
+    const maxStatus = statusOrdenado.length > 0 ? statusOrdenado[0][1] : 0;
+
+    // tempo médio em horas
+    const tempoMedioHoras = comResolucao > 0 ? somaResolucaoMs / comResolucao / 3_600_000 : null;
+
+    return { total: doMes.length, concluidos, pendentes, statusOrdenado, maxStatus, tempoMedioHoras };
+  }, [atendimentos, displayDate]);
+
+  const formatTempoMedio = (horas: number | null): string => {
+    if (horas == null) return '—';
+    if (horas < 24) return `${horas.toFixed(1)}h`;
+    return `${(horas / 24).toFixed(1)}d`;
+  };
 
   // ✅ 3. FUNÇÕES PARA NAVEGAR ENTRE OS MESES
   const goToPreviousMonth = () => {
@@ -170,7 +211,52 @@ export default function RelatoriosScreen() {
         data={rankingDoMes}
         renderItem={({ item, index }) => <RankingItem item={item} index={index} />}
         keyExtractor={(item) => item.terminalId}
-        contentContainerStyle={{ paddingHorizontal: 16 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
+        ListHeaderComponent={() => (
+          <View>
+            {/* Cartões de métricas */}
+            <View style={styles.metricsRow}>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricValue}>{metricas.total}</Text>
+                <Text style={styles.metricLabel}>Total</Text>
+              </View>
+              <View style={styles.metricCard}>
+                <Text style={[styles.metricValue, { color: '#28a745' }]}>{metricas.concluidos}</Text>
+                <Text style={styles.metricLabel}>Concluídos</Text>
+              </View>
+              <View style={styles.metricCard}>
+                <Text style={[styles.metricValue, { color: '#EA580C' }]}>{metricas.pendentes}</Text>
+                <Text style={styles.metricLabel}>Pendentes</Text>
+              </View>
+              <View style={styles.metricCard}>
+                <Text style={[styles.metricValue, { color: '#007AFF' }]}>{formatTempoMedio(metricas.tempoMedioHoras)}</Text>
+                <Text style={styles.metricLabel}>Tempo médio</Text>
+              </View>
+            </View>
+
+            {/* Distribuição por status (barras) */}
+            {metricas.statusOrdenado.length > 0 && (
+              <View style={styles.statusCard}>
+                <Text style={styles.statusCardTitle}>Distribuição por Status</Text>
+                {metricas.statusOrdenado.map(([status, count]) => {
+                  const cor = getStatusStyle(status).backgroundColor;
+                  const pct = metricas.maxStatus > 0 ? (count / metricas.maxStatus) * 100 : 0;
+                  return (
+                    <View key={status} style={styles.statusRow}>
+                      <Text style={styles.statusName} numberOfLines={1}>{status}</Text>
+                      <View style={styles.statusBarTrack}>
+                        <View style={[styles.statusBarFill, { width: `${pct}%`, backgroundColor: cor }]} />
+                      </View>
+                      <Text style={styles.statusCount}>{count}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            <Text style={styles.rankingSectionTitle}>Ranking de Terminais</Text>
+          </View>
+        )}
         ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>Nenhum atendimento registrado neste mês.</Text>
@@ -196,6 +282,18 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   headerSubtitle: { fontSize: 16, textAlign: 'center', color: 'gray', fontWeight: '600' },
+  metricsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  metricCard: { flexGrow: 1, flexBasis: '22%', minWidth: 74, backgroundColor: 'white', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 8, alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+  metricValue: { fontSize: 20, fontWeight: 'bold', color: '#333' },
+  metricLabel: { fontSize: 11, color: 'gray', marginTop: 2, textAlign: 'center' },
+  statusCard: { backgroundColor: 'white', borderRadius: 12, padding: 16, marginTop: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+  statusCardTitle: { fontSize: 15, fontWeight: 'bold', color: '#333', marginBottom: 10 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  statusName: { width: 96, fontSize: 11, color: '#444' },
+  statusBarTrack: { flex: 1, height: 14, backgroundColor: '#eef0f4', borderRadius: 7, overflow: 'hidden', marginHorizontal: 8 },
+  statusBarFill: { height: '100%', borderRadius: 7 },
+  statusCount: { width: 22, textAlign: 'right', fontSize: 12, fontWeight: 'bold', color: '#333' },
+  rankingSectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginTop: 18, marginBottom: 4 },
   itemContainer: { backgroundColor: 'white', borderRadius: 12, padding: 16, marginVertical: 8, flexDirection: 'row', alignItems: 'center', elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, },
   rankContainer: { backgroundColor: '#EFEFF4', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   rankNumber: { fontSize: 16, fontWeight: 'bold', color: '#007AFF' },

@@ -1,13 +1,15 @@
 // app/atendimento/[id].tsx
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, Pressable, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, Pressable, Image, Modal, Linking } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useAtendimentoStore } from '@/src/store/atendimentoStore';
 import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getStatusStyle } from '@/constants/theme';
 import { deletePhotoFile } from '@/src/services/photoService';
+import { exportAtendimentoPdf } from '@/src/services/pdfService';
+import { agendarLembretePendencia } from '@/src/services/notificationService';
 
 // (Componentes InfoCard e InfoRow continuam os mesmos)
 const InfoCard = ({ title, children }: { title: string, children: React.ReactNode }) => (
@@ -37,6 +39,40 @@ export default function DetalhesAtendimentoScreen() {
 
   // Foto aberta no visualizador em tela cheia (null = fechado).
   const [fotoAberta, setFotoAberta] = useState<string | null>(null);
+  const [exportando, setExportando] = useState(false);
+
+  const handleExportPdf = async () => {
+    if (!atendimento) return;
+    setExportando(true);
+    try {
+      await exportAtendimentoPdf(atendimento);
+    } catch {
+      Alert.alert('Erro', 'Não foi possível gerar o PDF.');
+    } finally {
+      setExportando(false);
+    }
+  };
+
+  const abrirNoMapa = () => {
+    if (atendimento?.latitude == null || atendimento?.longitude == null) return;
+    Linking.openURL(`https://www.google.com/maps?q=${atendimento.latitude},${atendimento.longitude}`);
+  };
+
+  const agendarLembrete = (dias: number) => {
+    if (!atendimento) return;
+    agendarLembretePendencia(atendimento, dias).then(id => {
+      if (id) Alert.alert('Lembrete agendado', `Você será avisado sobre esta pendência em ${dias} dia(s).`);
+      else Alert.alert('Permissão negada', 'Ative as notificações para receber lembretes.');
+    }).catch(() => Alert.alert('Erro', 'Não foi possível agendar o lembrete.'));
+  };
+
+  const handleLembrete = () => {
+    Alert.alert('Lembrar pendência', 'Quando você quer ser lembrado?', [
+      { text: 'Em 1 dia', onPress: () => agendarLembrete(1) },
+      { text: 'Em 3 dias', onPress: () => agendarLembrete(3) },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  };
 
   // ✅ 3. FUNÇÃO DE DELETAR ATUALIZADA
   const handleDelete = () => {
@@ -77,7 +113,16 @@ export default function DetalhesAtendimentoScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Stack.Screen options={{ title: `Chamado ${atendimento.numeroChamado}` }} />
+      <Stack.Screen
+        options={{
+          title: `Chamado ${atendimento.numeroChamado}`,
+          headerRight: () => (
+            <Pressable onPress={handleExportPdf} disabled={exportando} accessibilityLabel="Exportar atendimento em PDF" style={{ marginRight: 15 }}>
+              <FontAwesome name="file-pdf-o" size={24} color="#DC3545" />
+            </Pressable>
+          ),
+        }}
+      />
 
       <Modal visible={!!fotoAberta} transparent animationType="fade" onRequestClose={() => setFotoAberta(null)}>
         <Pressable style={styles.viewerOverlay} onPress={() => setFotoAberta(null)}>
@@ -93,12 +138,18 @@ export default function DetalhesAtendimentoScreen() {
            </View>
         </InfoCard>
         
-        {atendimento.status.includes('Pendente') && atendimento.detalhePendencia && (
+        {atendimento.status.includes('Pendente') && (
           <InfoCard title='Detalhe da Pendência'>
-            <View style={styles.pendenciaContainer}>
-              <FontAwesome name="info-circle" size={18} color="#D69E2E" />
-              <Text style={styles.blockText}>{atendimento.detalhePendencia}</Text>
-            </View>
+            {atendimento.detalhePendencia ? (
+              <View style={styles.pendenciaContainer}>
+                <FontAwesome name="info-circle" size={18} color="#D69E2E" />
+                <Text style={styles.blockText}>{atendimento.detalhePendencia}</Text>
+              </View>
+            ) : null}
+            <Pressable style={styles.lembreteButton} onPress={handleLembrete}>
+              <FontAwesome name="bell-o" size={16} color="#fff" />
+              <Text style={styles.lembreteButtonText}>Criar lembrete</Text>
+            </Pressable>
           </InfoCard>
         )}
 
@@ -107,6 +158,17 @@ export default function DetalhesAtendimentoScreen() {
           <InfoRow icon="desktop" label="Nº Lógico Terminal:" value={atendimento.numeroLogicoTerminal} />
           <InfoRow icon="calendar-check-o" label="Data de Início:" value={new Date(atendimento.dataInicio).toLocaleString('pt-BR')} />
           <InfoRow icon="calendar-times-o" label="Data de Fim:" value={atendimento.dataFim ? new Date(atendimento.dataFim).toLocaleString('pt-BR') : 'Em aberto'} />
+          {atendimento.latitude != null && atendimento.longitude != null && (
+            <View style={styles.infoRow}>
+              <View style={styles.labelContainer}>
+                <FontAwesome name="map-marker" size={14} color="#555" style={styles.icon} />
+                <Text style={styles.label}>Localização:</Text>
+              </View>
+              <Pressable onPress={abrirNoMapa}>
+                <Text style={[styles.value, styles.link]}>Ver no mapa</Text>
+              </Pressable>
+            </View>
+          )}
         </InfoCard>
 
         <InfoCard title='Descrição do Problema'>
@@ -142,6 +204,12 @@ export default function DetalhesAtendimentoScreen() {
           </Pressable>
         </View>
       </ScrollView>
+
+      {exportando && (
+        <View style={styles.busyOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -262,6 +330,10 @@ const styles = StyleSheet.create({
     borderLeftColor: '#FBBF24',
     gap: 10,
   },
+  lembreteButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#D69E2E', paddingVertical: 10, borderRadius: 8, marginTop: 10 },
+  lembreteButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  link: { color: '#0a58ca', textDecorationLine: 'underline', textAlign: 'right' },
+  busyOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' },
   fotoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   fotoThumb: { width: 90, height: 90, borderRadius: 8, borderWidth: 1, borderColor: '#ddd' },
   viewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },

@@ -25,17 +25,23 @@ const persistir = async (uri: string): Promise<string> => {
   return destino;
 };
 
-/** Abre a galeria. Retorna o URI persistido ou null se cancelado/negado. */
-export const pickFromLibrary = async (): Promise<string | null> => {
+/**
+ * Abre a galeria permitindo escolher VÁRIAS fotos de uma vez.
+ * Retorna os URIs persistidos (array vazio se cancelado/negado).
+ */
+export const pickFromLibrary = async (): Promise<string[]> => {
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) return null;
+  if (!perm.granted) return [];
 
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
+    allowsMultipleSelection: true,
     quality: 0.6,
   });
-  if (result.canceled || result.assets.length === 0) return null;
-  return persistir(result.assets[0].uri);
+  if (result.canceled || result.assets.length === 0) return [];
+
+  // Persiste todas em paralelo, mantendo a ordem de seleção.
+  return Promise.all(result.assets.map(asset => persistir(asset.uri)));
 };
 
 /** Abre a câmera. Retorna o URI persistido ou null se cancelado/negado. */

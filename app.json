@@ -2,7 +2,7 @@
   "expo": {
     "name": "Field-Tec",
     "slug": "Field-Tec",
-    "version": "2.2.2",
+    "version": "2.3.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "fieldtec",
@@ -39,7 +39,14 @@
           "photosPermission": "O app precisa acessar suas fotos para anexar imagens ao atendimento.",
           "cameraPermission": "O app precisa acessar a câmera para tirar fotos do atendimento."
         }
-      ]
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O app usa sua localização para registrar onde o atendimento foi realizado."
+        }
+      ],
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true

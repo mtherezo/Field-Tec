@@ -25,49 +25,61 @@ export default function BuscaScreen() {
   const params = useLocalSearchParams<{ terminalId?: string }>();
   const router = useRouter(); // Adicionado para limpar os parâmetros
 
-  const [terminalId, setTerminalId] = useState('');
+  const [termo, setTermo] = useState('');
   const [resultados, setResultados] = useState<Atendimento[]>([]);
   const [analise, setAnalise] = useState<AnaliseProblemas>({});
   const [pesquisaFeita, setPesquisaFeita] = useState(false);
 
-  const handleSearch = (idParaBuscar?: string) => {
+  // Busca em vários campos: terminal, chamado, motivo, causa, solução, status e pendência.
+  // Parcial e sem diferenciar maiúsculas/minúsculas.
+  const handleSearch = (termoParam?: string) => {
     Keyboard.dismiss();
     setPesquisaFeita(true);
 
-    const termoBusca = (idParaBuscar || terminalId).trim();
+    const alvo = (termoParam ?? termo).trim().toLowerCase();
+    if (!alvo) {
+      setResultados([]);
+      setAnalise({});
+      return;
+    }
 
-    // Compara os dois lados sem espaços para evitar falha por espaços acidentais.
-    const filtrados = atendimentos.filter(
-      (at) => at.numeroLogicoTerminal.trim() === termoBusca
-    );
-    filtrados.sort((a, b) => new Date(b.dataInicio).getTime() - new Date(a.dataInicio).getTime());
+    const camposBusca = (at: Atendimento) => [
+      at.numeroLogicoTerminal,
+      at.numeroChamado,
+      at.solicitacao,
+      at.causaReal,
+      at.diagnosticoSolucao,
+      at.status,
+      at.detalhePendencia,
+    ];
+
+    const filtrados = atendimentos
+      .filter((at) => camposBusca(at).some(c => (c || '').toLowerCase().includes(alvo)))
+      .sort((a, b) => new Date(b.dataInicio).getTime() - new Date(a.dataInicio).getTime());
     setResultados(filtrados);
 
     const contagem: AnaliseProblemas = {};
-    for (const atendimento of filtrados) {
-      const problema = atendimento.causaReal || 'Causa não informada';
+    for (const at of filtrados) {
+      const problema = at.causaReal || 'Causa não informada';
       contagem[problema] = (contagem[problema] || 0) + 1;
     }
     setAnalise(contagem);
   };
 
-  // ✅ NOVA FUNÇÃO PARA LIMPAR A BUSCA
   const handleClear = () => {
     Keyboard.dismiss();
-    setTerminalId('');
+    setTermo('');
     setResultados([]);
     setAnalise({});
     setPesquisaFeita(false);
-    // Limpa os parâmetros da rota para não re-buscar ao focar novamente
     router.setParams({ terminalId: undefined });
   };
 
-  // ✅ useFocusEffect MODIFICADO (SEM LIMPEZA AUTOMÁTICA)
+  // Busca automática quando chega da tela de Relatórios com um terminal.
   useFocusEffect(
     React.useCallback(() => {
-      // Se um terminalId foi passado como parâmetro E é diferente do que já está na tela
-      if (params.terminalId && params.terminalId !== terminalId) {
-        setTerminalId(params.terminalId);
+      if (params.terminalId && params.terminalId !== termo) {
+        setTermo(params.terminalId);
         handleSearch(params.terminalId);
       }
     }, [params.terminalId])
@@ -75,15 +87,16 @@ export default function BuscaScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ title: 'Busca por Terminal' }} />
+      <Stack.Screen options={{ title: 'Buscar Atendimentos' }} />
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.input}
-          placeholder="Digite o Nº Lógico do Terminal"
-          value={terminalId}
-          onChangeText={setTerminalId}
-          keyboardType="numeric"
+          placeholder="Terminal, chamado, causa, status..."
+          value={termo}
+          onChangeText={setTermo}
+          autoCapitalize="none"
           onSubmitEditing={() => handleSearch()}
+          returnKeyType="search"
         />
         {/* ✅ BOTÃO DE LIMPAR ADICIONADO */}
         <View style={styles.buttonContainer}>
@@ -93,7 +106,7 @@ export default function BuscaScreen() {
       </View>
 
       {pesquisaFeita && resultados.length === 0 && (
-          <Text style={styles.emptyText}>Nenhum histórico encontrado para este terminal.</Text>
+          <Text style={styles.emptyText}>Nenhum atendimento encontrado para a busca.</Text>
       )}
 
       {resultados.length > 0 && (

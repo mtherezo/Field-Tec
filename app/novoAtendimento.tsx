@@ -20,6 +20,7 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { pickFromLibrary, takePhoto, deletePhotoFile } from '@/src/services/photoService';
+import { getCurrentLocation } from '@/src/services/locationService';
 
 export default function FormAtendimentoScreen() {
   const router = useRouter();
@@ -39,6 +40,9 @@ export default function FormAtendimentoScreen() {
   const [dataInicio, setDataInicio] = useState(new Date());
   const [dataFim, setDataFim] = useState<Date | null>(null);
   const [fotos, setFotos] = useState<string[]>([]);
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [capturandoGps, setCapturandoGps] = useState(false);
   const isPendente = status.includes('Pendente');
   const numeroLogicoTerminalRef = useRef<RNTextInput>(null);
   const solicitacaoRef = useRef<RNTextInput>(null);
@@ -61,21 +65,51 @@ export default function FormAtendimentoScreen() {
         if (atendimentoParaEditar.dataFim) { setDataFim(new Date(atendimentoParaEditar.dataFim)); }
         else { setDataFim(null); }
         setFotos(atendimentoParaEditar.fotos || []);
+        setLatitude(atendimentoParaEditar.latitude ?? null);
+        setLongitude(atendimentoParaEditar.longitude ?? null);
       }
     }
   }, [atendimentoId, isEditMode, atendimentos]);
 
+  const handleCapturarGps = async () => {
+    setCapturandoGps(true);
+    try {
+      const coords = await getCurrentLocation();
+      if (coords) {
+        setLatitude(coords.latitude);
+        setLongitude(coords.longitude);
+      } else {
+        Alert.alert('Permissão negada', 'Não foi possível acessar a localização. Verifique as permissões do app.');
+      }
+    } catch {
+      Alert.alert('Erro', 'Não foi possível obter a localização.');
+    } finally {
+      setCapturandoGps(false);
+    }
+  };
+
   const showDateTimePicker = (currentDate: Date, setDateFunction: (date: Date) => void, mode: 'date' | 'time') => {
-    DateTimePickerAndroid.open({ value: currentDate, onChange: (e, d) => setDateFunction(d || currentDate), mode, is24Hour: true });
+    DateTimePickerAndroid.open({
+      value: currentDate,
+      mode,
+      is24Hour: true,
+      // onValueChange dispara apenas quando o usuário confirma (substitui onChange, depreciado).
+      onValueChange: (_event, d) => { if (d) setDateFunction(d); },
+    });
   };
 
   const handleAddFoto = async (origem: 'camera' | 'galeria') => {
     try {
-      const uri = origem === 'camera' ? await takePhoto() : await pickFromLibrary();
-      if (uri) setFotos(prev => [...prev, uri]);
-      // uri null = cancelado ou permissão negada (fluxo silencioso)
+      if (origem === 'camera') {
+        const uri = await takePhoto();
+        if (uri) setFotos(prev => [...prev, uri]);
+      } else {
+        const uris = await pickFromLibrary(); // pode retornar várias
+        if (uris.length > 0) setFotos(prev => [...prev, ...uris]);
+      }
+      // vazio/null = cancelado ou permissão negada (fluxo silencioso)
     } catch {
-      Alert.alert('Erro', 'Não foi possível adicionar a foto.');
+      Alert.alert('Erro', 'Não foi possível adicionar a(s) foto(s).');
     }
   };
 
@@ -109,6 +143,8 @@ export default function FormAtendimentoScreen() {
           dataInicio: dataInicio.toISOString(),
           dataFim: dataFim ? dataFim.toISOString() : null,
           fotos,
+          latitude,
+          longitude,
         };
         await updateAtendimento(atendimentoAtualizado);
       } else {
@@ -119,6 +155,8 @@ export default function FormAtendimentoScreen() {
           dataInicio: dataInicio.toISOString(),
           dataFim: dataFim ? dataFim.toISOString() : null,
           fotos,
+          latitude,
+          longitude,
         };
         await addAtendimento(novoAtendimento);
       }
@@ -200,6 +238,25 @@ export default function FormAtendimentoScreen() {
             ))}
           </View>
         )}
+
+        <Text style={styles.label}>Localização (GPS)</Text>
+        <Text style={styles.dateDisplay}>
+          {latitude != null && longitude != null
+            ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
+            : 'Não capturada'}
+        </Text>
+        <View style={styles.dateButtonsContainer}>
+          <Pressable style={[styles.button, styles.secondaryButton]} onPress={handleCapturarGps} disabled={capturandoGps}>
+            <FontAwesome name="map-marker" size={15} color="#007AFF" />
+            <Text style={[styles.buttonText, styles.secondaryButtonText]}>{capturandoGps ? 'Obtendo...' : 'Capturar Local'}</Text>
+          </Pressable>
+          {latitude != null && (
+            <Pressable style={[styles.button, styles.clearButton]} onPress={() => { setLatitude(null); setLongitude(null); }}>
+              <FontAwesome name="times-circle" size={15} color="#DC3545" />
+              <Text style={[styles.buttonText, styles.clearButtonText]}>Limpar</Text>
+            </Pressable>
+          )}
+        </View>
 
         <Pressable style={[styles.button, styles.primaryButton]} onPress={handleSave}>
           <FontAwesome name="save" size={15} color="white" /><Text style={styles.buttonText}>{isEditMode ? "Salvar Alterações" : "Salvar Atendimento"}</Text>

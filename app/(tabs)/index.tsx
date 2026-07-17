@@ -90,8 +90,9 @@ export default function ListaAtendimentosScreen() {
     DateTimePickerAndroid.open({
       value: dataAtual || new Date(),
       mode: 'date',
-      onChange: (event, selectedDate) => {
-        if (event.type === 'set' && selectedDate) {
+      // onValueChange dispara apenas na confirmação (substitui onChange, depreciado).
+      onValueChange: (_event, selectedDate) => {
+        if (selectedDate) {
           if (tipo === 'inicio') setDataInicioFiltro(selectedDate);
           else setDataFimFiltro(selectedDate);
         }
