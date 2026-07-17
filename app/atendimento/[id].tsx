@@ -60,9 +60,14 @@ export default function DetalhesAtendimentoScreen() {
 
   const agendarLembrete = (dias: number) => {
     if (!atendimento) return;
-    agendarLembretePendencia(atendimento, dias).then(id => {
-      if (id) Alert.alert('Lembrete agendado', `Você será avisado sobre esta pendência em ${dias} dia(s).`);
-      else Alert.alert('Permissão negada', 'Ative as notificações para receber lembretes.');
+    agendarLembretePendencia(atendimento, dias).then(res => {
+      if (res.ok) {
+        Alert.alert('Lembrete agendado', `Você será avisado sobre esta pendência em ${dias} dia(s).`);
+      } else if (res.motivo === 'expo-go') {
+        Alert.alert('Indisponível no Expo Go', 'Os lembretes por notificação exigem um development build do app. No Expo Go esse recurso fica desativado.');
+      } else {
+        Alert.alert('Permissão negada', 'Ative as notificações para receber lembretes.');
+      }
     }).catch(() => Alert.alert('Erro', 'Não foi possível agendar o lembrete.'));
   };
 
