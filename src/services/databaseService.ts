@@ -69,36 +69,27 @@ export const initDatabase = async (): Promise<void> => {
 };
 
 /**
- * Migrações incrementais para bancos criados por versões anteriores do app.
- * Usa PRAGMA user_version para saber em que versão o banco está.
+ * Garante que todas as colunas esperadas existam, independentemente do
+ * PRAGMA user_version. A checagem é feita coluna a coluna (idempotente e
+ * auto-corretiva), evitando ficar preso caso o user_version tenha sido
+ * marcado sem a coluna realmente ter sido criada.
  */
 const runSchemaMigrations = async (db: SQLite.SQLiteDatabase): Promise<void> => {
-  const result = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  const currentVersion = result?.user_version ?? 0;
-
   const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(atendimentos)');
   const temColuna = (nome: string) => columns.some(c => c.name === nome);
 
-  if (currentVersion < 1) {
-    // v1: garante a coluna 'fotos' em bancos antigos.
-    if (!temColuna('fotos')) {
-      await db.execAsync('ALTER TABLE atendimentos ADD COLUMN fotos TEXT;');
-    }
+  // Coluna adicionada por engano/versão anterior? Só adiciona o que faltar.
+  if (!temColuna('fotos')) {
+    await db.execAsync('ALTER TABLE atendimentos ADD COLUMN fotos TEXT;');
+  }
+  if (!temColuna('latitude')) {
+    await db.execAsync('ALTER TABLE atendimentos ADD COLUMN latitude REAL;');
+  }
+  if (!temColuna('longitude')) {
+    await db.execAsync('ALTER TABLE atendimentos ADD COLUMN longitude REAL;');
   }
 
-  if (currentVersion < 2) {
-    // v2: coordenadas de GPS.
-    if (!temColuna('latitude')) {
-      await db.execAsync('ALTER TABLE atendimentos ADD COLUMN latitude REAL;');
-    }
-    if (!temColuna('longitude')) {
-      await db.execAsync('ALTER TABLE atendimentos ADD COLUMN longitude REAL;');
-    }
-  }
-
-  if (currentVersion !== SCHEMA_VERSION) {
-    await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION};`);
-  }
+  await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION};`);
 };
 
 /**
